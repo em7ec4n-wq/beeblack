@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #F6F6F6;
+    color: #171717;
+  }
+
+  h1, h2, h3, h4, .font-heading {
+    font-family: var(--font-geist), var(--font-inter), sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
