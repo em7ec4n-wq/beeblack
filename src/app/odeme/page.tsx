@@ -13,9 +13,8 @@ export default function CheckoutPage() {
   const [city, setCity] = useState("İstanbul");
   const [district, setDistrict] = useState("");
   const [address, setAddress] = useState("");
-  const [customerNote, setCustomerNote] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<
-    "credit_card" | "cod" | "bank_transfer"
+    "credit_card" | "cod"
   >("credit_card");
 
   const [completedOrderNum, setCompletedOrderNum] = useState("");
@@ -76,7 +75,6 @@ export default function CheckoutPage() {
       status: "pending",
       cargoCompany: "Aras Kargo",
       trackingNumber: trackingNum,
-      customerNote: customerNote.trim() || undefined,
     });
 
     updateStore(next);
@@ -219,18 +217,6 @@ export default function CheckoutPage() {
                 className="mt-1 w-full rounded-xl border border-neutral-300 p-3 text-sm"
               />
             </div>
-
-            <div className="mt-4">
-              <label className="block text-xs font-bold text-neutral-700">
-                Sipariş / Hediye Kartı Notunuz (İsteğe Bağlı)
-              </label>
-              <input
-                value={customerNote}
-                onChange={(e) => setCustomerNote(e.target.value)}
-                placeholder="Hediye paketi içine yazılmasını istediğiniz not…"
-                className="mt-1 h-11 w-full rounded-xl border border-neutral-300 px-3.5 text-sm"
-              />
-            </div>
           </div>
 
           {/* Payment Methods */}
@@ -238,7 +224,7 @@ export default function CheckoutPage() {
             <h2 className="text-base font-bold text-neutral-900">
               2. Ödeme Yöntemi Seçiniz
             </h2>
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={() => setPaymentMethod("credit_card")}
@@ -273,23 +259,6 @@ export default function CheckoutPage() {
                   Bedeli
                 </p>
               </button>
-
-              <button
-                type="button"
-                onClick={() => setPaymentMethod("bank_transfer")}
-                className={`rounded-2xl border-2 p-3.5 text-left transition ${
-                  paymentMethod === "bank_transfer"
-                    ? "border-[#1974E5] bg-blue-50/40"
-                    : "border-neutral-200"
-                }`}
-              >
-                <p className="text-xs font-extrabold text-neutral-900">
-                  🏦 Havale / FAST
-                </p>
-                <p className="mt-0.5 text-[11px] text-neutral-500">
-                  Anında Onay
-                </p>
-              </button>
             </div>
 
             {paymentMethod === "credit_card" && (
@@ -310,15 +279,6 @@ export default function CheckoutPage() {
                   placeholder="CVV (3 Hane)"
                   className="h-11 rounded-xl border border-neutral-300 bg-white px-3.5 text-sm"
                 />
-              </div>
-            )}
-
-            {paymentMethod === "bank_transfer" && (
-              <div className="mt-4 rounded-2xl bg-[#F6F6F6] p-4 text-xs text-neutral-700">
-                <p className="font-bold text-neutral-900">IBAN Bilgimiz:</p>
-                <p className="mt-1 font-mono">
-                  {store.settings.paymentMethods.bankIban}
-                </p>
               </div>
             )}
           </div>

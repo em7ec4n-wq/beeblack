@@ -21,7 +21,7 @@ const FAQS = [
   },
   {
     q: "Kapıda ödeme ve kredi kartına taksit seçeneğiniz var mı?",
-    a: "Tüm kredi kartlarına 12 aya varan taksit, 3D Secure güvenli ödeme, Havale/EFT ve Kapıda Ödeme seçeneklerimiz mevcuttur.",
+    a: "Tüm kredi kartlarına 12 aya varan taksit, 3D Secure güvenli ödeme ve Kapıda Ödeme seçeneklerimiz mevcuttur.",
   },
   {
     q: "İsim baskılı ürünlerde iade veya değişim yapılıyor mu?",

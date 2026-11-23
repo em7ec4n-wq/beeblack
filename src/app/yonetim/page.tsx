@@ -3216,21 +3216,6 @@ export default function AdminPanelPage() {
                   className="mt-1 h-10 w-full rounded-xl border border-neutral-300 px-3 text-sm"
                 />
               </div>
-
-              <div>
-                <label className="block text-xs font-bold">
-                  Havale / EFT IBAN Bilgisi
-                </label>
-                <input
-                  value={store.settings.paymentMethods.bankIban}
-                  onChange={(e) => {
-                    const next = structuredClone(store);
-                    next.settings.paymentMethods.bankIban = e.target.value;
-                    updateStore(next);
-                  }}
-                  className="mt-1 h-10 w-full rounded-xl border border-neutral-300 px-3 text-sm"
-                />
-              </div>
             </div>
 
             <div className="space-y-4 rounded-3xl border border-neutral-200 bg-white p-6 shadow-2xs">
