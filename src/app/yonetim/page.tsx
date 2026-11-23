@@ -2752,12 +2752,32 @@ export default function AdminPanelPage() {
                     className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-200 p-3.5"
                   >
                     <div className="flex items-center gap-3">
-                      <img
-                        src={up.image}
-                        alt={up.name}
-                        className="h-12 w-12 rounded-xl object-cover"
-                      />
-                      <div>
+                      {/* Photo preview with 1-click change overlay */}
+                      <div className="relative group shrink-0">
+                        <img
+                          src={up.image}
+                          alt={up.name}
+                          className="h-14 w-14 rounded-xl border border-neutral-200 object-cover shadow-2xs"
+                        />
+                        <label className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-black/60 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition cursor-pointer">
+                          <span>📷 Seç</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) =>
+                              handlePhotoFile(e.target.files, (url) => {
+                                const next = structuredClone(store);
+                                next.upsells[idx].image = url;
+                                updateStore(next);
+                                notify(`✓ "${up.name}" fotoğrafı güncellendi!`);
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      <div className="space-y-1">
                         <input
                           value={up.name}
                           onChange={(e) => {
@@ -2767,11 +2787,31 @@ export default function AdminPanelPage() {
                           }}
                           className="text-sm font-bold text-neutral-900 focus:outline-none"
                         />
-                        <p className="text-[11px] text-neutral-500">
-                          {up.isGiftWrap
-                            ? "🎁 Hediye Paketi Seçeneği"
-                            : "✨ Tamamlayıcı Kasa Önü Ürün"}
-                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-[11px] text-neutral-500">
+                            {up.isGiftWrap
+                              ? "🎁 Hediye Paketi Seçeneği"
+                              : "✨ Tamamlayıcı Kasa Önü Ürün"}
+                          </p>
+
+                          {/* Fotoğraf Değiştir Button */}
+                          <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-neutral-300 bg-white px-2 py-0.5 text-[10px] font-bold text-neutral-800 hover:bg-neutral-50 shadow-2xs">
+                            📷 Fotoğraf Değiştir
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                handlePhotoFile(e.target.files, (url) => {
+                                  const next = structuredClone(store);
+                                  next.upsells[idx].image = url;
+                                  updateStore(next);
+                                  notify(`✓ "${up.name}" fotoğrafı güncellendi!`);
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
                       </div>
                     </div>
 
