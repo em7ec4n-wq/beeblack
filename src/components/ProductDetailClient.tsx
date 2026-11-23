@@ -485,21 +485,26 @@ export function ProductDetailClient({ slug }: { slug: string }) {
                     <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#1974E5]">
                       Sıcak Baskı İsim Girişi (Düz / Kör Baskı)
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStampType("none");
-                        setCustomText("");
-                      }}
-                      className="text-[11px] font-semibold text-neutral-400 hover:text-rose-600"
-                    >
-                      Kaldır ✕
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-neutral-400">
+                        {customText.length}/13
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStampType("none");
+                          setCustomText("");
+                        }}
+                        className="text-[11px] font-semibold text-neutral-400 hover:text-rose-600"
+                      >
+                        Kaldır ✕
+                      </button>
+                    </div>
                   </div>
 
                   <input
                     type="text"
-                    maxLength={18}
+                    maxLength={13}
                     value={customText}
                     onChange={(e) => setCustomText(e.target.value)}
                     placeholder="Yazılacak İsim / Baş Harfler (Örn: A. YILMAZ)"
@@ -1084,7 +1089,7 @@ export function ProductDetailClient({ slug }: { slug: string }) {
                 <p className="mt-1">
                   • En estetik görünüm için <strong>Ad Soyad</strong> veya{" "}
                   <strong>Baş Harfler (Örn: A. YILMAZ)</strong> şeklinde
-                  maksimum 18 karakter önerilir.
+                  maksimum 13 karakter önerilir.
                   <br />• Kişiye özel isim/logo baskısı yapılan ürünlerde cayma
                   hakkı kapsamında iade/değişim yapılamamaktadır.
                 </p>
