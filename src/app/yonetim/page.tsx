@@ -46,10 +46,18 @@ export default function AdminPanelPage() {
   // Editing existing product variants modal
   const [editingVariantProduct, setEditingVariantProduct] = useState<Product | null>(null);
 
-  // Order filter
+  // Order workflow filter (Tümü, Yeni Siparişler, İşleme Alınanlar, Kargoda/Taşıma Durumu, Teslim Edilenler)
   const [orderFilter, setOrderFilter] = useState<
-    "all" | "preparing" | "shipped" | "delivered"
+    "all" | "pending" | "preparing" | "shipped" | "delivered"
   >("all");
+
+  // Barcode Scanner / Kargo Okutucu state (Barkod tabancası veya manuel giriş)
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeScanFeedback, setBarcodeScanFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const [scannedOrderId, setScannedOrderId] = useState<string | null>(null);
 
   // New Product Form
   const [showNewProd, setShowNewProd] = useState(false);
@@ -169,11 +177,17 @@ export default function AdminPanelPage() {
 
   // Live metrics
   const totalRevenue = store.orders.reduce((s, o) => s + o.total, 0);
-  const shippedOrdersCount = store.orders.filter(
-    (o) => o.status === "shipped"
+  const pendingOrdersCount = store.orders.filter(
+    (o) => o.status === "pending"
   ).length;
   const preparingOrdersCount = store.orders.filter(
     (o) => o.status === "preparing"
+  ).length;
+  const shippedOrdersCount = store.orders.filter(
+    (o) => o.status === "shipped"
+  ).length;
+  const deliveredOrdersCount = store.orders.filter(
+    (o) => o.status === "delivered"
   ).length;
   const unansweredCount = store.questions.filter(
     (q) => q.status === "unanswered"
@@ -181,6 +195,78 @@ export default function AdminPanelPage() {
   const pendingReturnsCount = store.returns.filter(
     (r) => r.status === "pending"
   ).length;
+
+  // Sound effect for barcode scan
+  const playBeep = () => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.16);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.16);
+    } catch {
+      // Audio fallback
+    }
+  };
+
+  // Barcode Scan Handler (Barkod tabancası veya manuel giriş okutulduğunda otomatik kargoya verip taşıma durumuna geçirir)
+  const handleBarcodeScan = (rawCode: string) => {
+    const cleanCode = rawCode.trim();
+    if (!cleanCode) return;
+
+    const next = structuredClone(store);
+    const matched = next.orders.find((o) => {
+      const tracking = (o.trackingNumber || "").toLowerCase();
+      const orderNo = (o.orderNumber || "").toLowerCase();
+      const search = cleanCode.toLowerCase();
+      return (
+        tracking === search ||
+        orderNo === search ||
+        orderNo.replace(/[^a-z0-9]/g, "") === search.replace(/[^a-z0-9]/g, "") ||
+        o.id.toLowerCase() === search
+      );
+    });
+
+    if (matched) {
+      playBeep();
+      matched.status = "shipped";
+      matched.cargoCompany = "Aras Kargo";
+      if (!matched.trackingNumber || !matched.trackingNumber.startsWith("418")) {
+        matched.trackingNumber =
+          "418" + Math.floor(100000000 + Math.random() * 900000000);
+      }
+      updateStore(next);
+      setBarcodeInput("");
+      setScannedOrderId(matched.id);
+      setBarcodeScanFeedback({
+        type: "success",
+        message: `BİP! ✓ Barkod Okundu: Sipariş #${matched.orderNumber} (${matched.customerName}) Aras Kargo ile Taşıma Durumuna Alındı!`,
+      });
+      notify(`✓ Sipariş #${matched.orderNumber} kargoya verildi!`);
+      setTimeout(() => {
+        setBarcodeScanFeedback(null);
+      }, 6000);
+    } else {
+      setBarcodeScanFeedback({
+        type: "error",
+        message: `⚠️ Barkod veya kod "${cleanCode}" ile eşleşen sipariş bulunamadı! Lütfen kodu kontrol edin.`,
+      });
+      setTimeout(() => {
+        setBarcodeScanFeedback(null);
+      }, 4500);
+    }
+  };
 
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
@@ -400,12 +486,12 @@ export default function AdminPanelPage() {
               <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-2xs">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-neutral-500">
-                    KARGODAKİ & HAZIRLANAN SİPARİŞLER
+                    SİPARİŞ İŞLEM DURUMLARI
                   </span>
-                  <span className="text-lg">🚚</span>
+                  <span className="text-lg">📦</span>
                 </div>
-                <p className="mt-2 text-2xl font-extrabold text-[#1974E5]">
-                  {shippedOrdersCount} Kargoda / {preparingOrdersCount} Baskıda
+                <p className="mt-2 text-xl font-extrabold text-[#1974E5]">
+                  {pendingOrdersCount} Yeni • {preparingOrdersCount} İşlemde • {shippedOrdersCount} Kargoda
                 </p>
                 <button
                   type="button"
@@ -1452,21 +1538,38 @@ export default function AdminPanelPage() {
         )}
         {activeTab === "siparisler" && (
           <div className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white p-4">
+            {/* WORKFLOW TABS (5 AŞAMA: Tümü, Yeni Siparişler, İşleme Alınanlar, Kargoda/Taşıma Durumu, Teslim Edilenler) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white p-4 shadow-2xs">
               <div className="flex flex-wrap gap-2">
                 {[
-                  { k: "all", label: `Tümü (${store.orders.length})` },
+                  {
+                    k: "all",
+                    label: `Tümü (${store.orders.length})`,
+                    activeCls: "bg-neutral-900 text-white",
+                  },
+                  {
+                    k: "pending",
+                    label: `📥 Yeni Siparişler (${pendingOrdersCount})`,
+                    activeCls: "bg-amber-600 text-white",
+                    badgeCls:
+                      pendingOrdersCount > 0
+                        ? "border-amber-400 bg-amber-50 text-amber-900 font-extrabold animate-pulse"
+                        : "",
+                  },
                   {
                     k: "preparing",
-                    label: `Atölye / Sıcak Baskıda (${preparingOrdersCount})`,
+                    label: `⚡ İşleme Alındı / Bugün Yapılacaklar (${preparingOrdersCount})`,
+                    activeCls: "bg-[#1974E5] text-white",
                   },
                   {
                     k: "shipped",
-                    label: `Kargoda Olan Siparişler (${shippedOrdersCount})`,
+                    label: `🚚 Kargoda / Taşıma Durumunda (${shippedOrdersCount})`,
+                    activeCls: "bg-indigo-600 text-white",
                   },
                   {
                     k: "delivered",
-                    label: "Teslim Edilenler",
+                    label: `✅ Teslim Edilenler (${deliveredOrdersCount})`,
+                    activeCls: "bg-emerald-600 text-white",
                   },
                 ].map((f) => (
                   <button
@@ -1474,22 +1577,22 @@ export default function AdminPanelPage() {
                     type="button"
                     onClick={() =>
                       setOrderFilter(
-                        f.k as "all" | "preparing" | "shipped" | "delivered"
+                        f.k as "all" | "pending" | "preparing" | "shipped" | "delivered"
                       )
                     }
-                    className={`rounded-xl px-3.5 py-2 text-xs font-bold ${
+                    className={`rounded-xl px-3.5 py-2 text-xs font-bold transition flex items-center gap-1.5 ${
                       orderFilter === f.k
-                        ? "bg-neutral-900 text-white"
-                        : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                        ? f.activeCls
+                        : `border border-neutral-200 bg-neutral-100 text-neutral-700 hover:bg-neutral-200 ${f.badgeCls || ""}`
                     }`}
                   >
-                    {f.label}
+                    <span>{f.label}</span>
                   </button>
                 ))}
               </div>
 
               {/* Select All Checkbox */}
-              <label className="flex items-center gap-2 cursor-pointer rounded-xl bg-neutral-100 px-3 py-2 text-xs font-bold text-neutral-800 hover:bg-neutral-200">
+              <label className="flex items-center gap-2 cursor-pointer rounded-xl bg-neutral-100 px-3.5 py-2 text-xs font-bold text-neutral-800 hover:bg-neutral-200">
                 <input
                   type="checkbox"
                   checked={
@@ -1515,6 +1618,105 @@ export default function AdminPanelPage() {
               </label>
             </div>
 
+            {/* BARKOD OKUYUCU (BARKOD TABANCASI İLE OTOMATİK KARGOYA VERME & TAŞIMA DURUMUNA GEÇİRME) */}
+            <div className="rounded-3xl border-2 border-dashed border-[#1974E5]/40 bg-gradient-to-r from-blue-50/90 via-white to-indigo-50/90 p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#1974E5] text-white shadow-xs">
+                    <span className="text-xl">🔫</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-black text-neutral-900">
+                        Barkod Okutarak Otomatik Kargoya Ver
+                      </h3>
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-800">
+                        Otomatik &quot;Taşıma Durumu&quot;na Geçirir
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-600">
+                      Aras Kargo etiketindeki barkodu tabancayla okutun veya takip kodunu / sipariş numarasını girip Enter&apos;a basın. Sistem sesli onay verip siparişi anında <strong>Kargoda / Taşıma Durumunda</strong> sekmesine taşır.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Test Demo Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const candidate =
+                      store.orders.find(
+                        (o) => o.status === "preparing" || o.status === "pending"
+                      ) || store.orders[0];
+                    if (candidate) {
+                      handleBarcodeScan(
+                        candidate.trackingNumber || candidate.orderNumber
+                      );
+                    } else {
+                      notify("Test edilecek sipariş bulunamadı");
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 py-2 text-xs font-bold text-neutral-700 hover:bg-neutral-50 shadow-2xs"
+                  title="Sistemi test etmek için örnek bir kargo barkodunu okutmuş gibi simüle eder"
+                >
+                  <span>🧪 Örnek Barkod Okut (Test Et)</span>
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleBarcodeScan(barcodeInput);
+                }}
+                className="mt-3.5 flex gap-2"
+              >
+                <div className="relative flex-1">
+                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 font-mono text-sm">
+                    ║▌║▌║
+                  </span>
+                  <input
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    placeholder="Barkod tabancası ile kargo etiketini okutun veya Aras Kargo takip no / sipariş no girip Enter'a basın..."
+                    className="h-11 w-full rounded-xl border-2 border-neutral-300 bg-white pl-11 pr-4 text-xs sm:text-sm font-mono font-bold text-neutral-900 placeholder:font-sans placeholder:font-normal placeholder:text-neutral-400 focus:border-[#1974E5] focus:outline-hidden"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-[#1974E5] px-5 text-xs font-extrabold uppercase tracking-wider text-white shadow-xs hover:bg-[#1461c4]"
+                >
+                  <span>Okut &amp; Kargoya Ver</span>
+                  <span>→</span>
+                </button>
+              </form>
+
+              {/* Feedback Alert */}
+              {barcodeScanFeedback && (
+                <div
+                  className={`mt-3 flex items-center justify-between rounded-xl p-3.5 text-xs font-bold shadow-xs transition ${
+                    barcodeScanFeedback.type === "success"
+                      ? "border border-emerald-300 bg-emerald-50 text-emerald-900"
+                      : "border border-rose-300 bg-rose-50 text-rose-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-lg">
+                      {barcodeScanFeedback.type === "success" ? "🔊" : "⚠️"}
+                    </span>
+                    <span>{barcodeScanFeedback.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBarcodeScanFeedback(null)}
+                    className="text-neutral-500 hover:text-neutral-800"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* BATCH OPERATIONS ACTION BAR ("Toplu İşlem Yap") */}
             {selectedOrderIds.length > 0 && (
               <div className="sticky top-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#1974E5] bg-blue-50/95 p-4 shadow-lg backdrop-blur-xs">
@@ -1526,6 +1728,26 @@ export default function AdminPanelPage() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Toplu İşleme Al (Bugün Yapılacaklar) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = structuredClone(store);
+                      next.orders.forEach((o) => {
+                        if (selectedOrderIds.includes(o.id)) {
+                          o.status = "preparing";
+                        }
+                      });
+                      updateStore(next);
+                      notify(
+                        `✓ Seçili ${selectedOrderIds.length} sipariş işleme alındı! "Bugün Yapılacaklar" listesine eklendi.`
+                      );
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 text-xs font-bold text-white shadow-xs hover:bg-amber-600"
+                  >
+                    ⚡ Seçilenleri İşleme Al (Bugün Yap) ({selectedOrderIds.length})
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -1534,9 +1756,9 @@ export default function AdminPanelPage() {
                       );
                       setBatchLabelOrders(sel);
                     }}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#1974E5] px-4 text-xs font-bold text-white shadow-xs hover:bg-[#1461c4]"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#1974E5] px-3.5 text-xs font-bold text-white shadow-xs hover:bg-[#1461c4]"
                   >
-                    🏷️ Toplu Barkod & Kargo Etiketi Çıkar ({selectedOrderIds.length})
+                    🏷️ Toplu Barkod &amp; Kargo Etiketi Çıkar
                   </button>
 
                   <button
@@ -1547,9 +1769,9 @@ export default function AdminPanelPage() {
                       );
                       setBatchInvoiceOrders(sel);
                     }}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
                   >
-                    🧾 Toplu E-Arşiv Fatura Yazdır ({selectedOrderIds.length})
+                    🧾 Toplu Fatura
                   </button>
 
                   <button
@@ -1569,12 +1791,31 @@ export default function AdminPanelPage() {
                       });
                       updateStore(next);
                       notify(
-                        `✓ Seçili ${selectedOrderIds.length} sipariş Aras Kargo takip koduyla kargoya verildi!`
+                        `✓ Seçili ${selectedOrderIds.length} sipariş Aras Kargo takip koduyla Taşıma Durumuna alındı!`
                       );
                     }}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-xs font-bold text-white shadow-xs hover:bg-indigo-700"
                   >
-                    🚚 Toplu Aras Kargo&apos;ya Ver
+                    🚚 Toplu Kargoya Ver (Taşıma Durumu)
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = structuredClone(store);
+                      next.orders.forEach((o) => {
+                        if (selectedOrderIds.includes(o.id)) {
+                          o.status = "delivered";
+                        }
+                      });
+                      updateStore(next);
+                      notify(
+                        `✓ Seçili ${selectedOrderIds.length} sipariş teslim edildi olarak işaretlendi!`
+                      );
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                  >
+                    ✅ Toplu Teslim Edildi Yap
                   </button>
 
                   <button
@@ -1591,11 +1832,14 @@ export default function AdminPanelPage() {
             <div className="space-y-4">
               {filteredOrders.map((ord, idx) => {
                 const isSelected = selectedOrderIds.includes(ord.id);
+                const isScanned = scannedOrderId === ord.id;
                 return (
                   <div
                     key={ord.id}
                     className={`rounded-3xl border transition p-5 shadow-2xs ${
-                      isSelected
+                      isScanned
+                        ? "border-emerald-500 ring-4 ring-emerald-300/50 bg-emerald-50/20"
+                        : isSelected
                         ? "border-[#1974E5] bg-blue-50/20"
                         : "border-neutral-200 bg-white"
                     }`}
@@ -1617,7 +1861,7 @@ export default function AdminPanelPage() {
                           className="mt-1 h-5 w-5 rounded accent-[#1974E5] cursor-pointer"
                         />
                         <div>
-                          <div className="flex items-center gap-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="font-mono text-base font-extrabold text-neutral-900">
                               Sipariş #{ord.orderNumber}
                             </span>
@@ -1627,6 +1871,33 @@ export default function AdminPanelPage() {
                             <span className="text-xs text-neutral-500">
                               {ord.createdAt}
                             </span>
+
+                            {/* Status Badges */}
+                            {ord.status === "pending" && (
+                              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-900">
+                                📥 Yeni Sipariş (İşlem Bekliyor)
+                              </span>
+                            )}
+                            {ord.status === "preparing" && (
+                              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-extrabold text-blue-900">
+                                ⚡ İşleme Alındı (Bugün Yapılacak)
+                              </span>
+                            )}
+                            {ord.status === "shipped" && (
+                              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-900">
+                                🚚 Kargoda (Taşıma Durumunda)
+                              </span>
+                            )}
+                            {ord.status === "delivered" && (
+                              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-extrabold text-emerald-900">
+                                ✅ Teslim Edildi
+                              </span>
+                            )}
+                            {ord.status === "returned" && (
+                              <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[11px] font-extrabold text-rose-900">
+                                ↩️ İade
+                              </span>
+                            )}
                           </div>
                           <p className="mt-1 text-xs text-neutral-600">
                             <strong>Müşteri:</strong> {ord.customerName} •{" "}
@@ -1637,6 +1908,80 @@ export default function AdminPanelPage() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        {/* 1-Click Fast Workflow Progression Buttons */}
+                        {ord.status === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = structuredClone(store);
+                              const target = next.orders.find((x) => x.id === ord.id);
+                              if (target) {
+                                target.status = "preparing";
+                                updateStore(next);
+                                notify(
+                                  `✓ Sipariş #${ord.orderNumber} işleme alındı! "Bugün Yapılacaklar" listesine taşındı.`
+                                );
+                              }
+                            }}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 text-xs font-extrabold text-white shadow-xs hover:bg-amber-600 transition"
+                            title="Siparişi işleme al ve bugün yapılacaklara ekle"
+                          >
+                            <span>⚡ İşleme Al (Bugün Yap)</span>
+                          </button>
+                        )}
+
+                        {ord.status === "preparing" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = structuredClone(store);
+                              const target = next.orders.find((x) => x.id === ord.id);
+                              if (target) {
+                                target.status = "shipped";
+                                target.cargoCompany = "Aras Kargo";
+                                if (
+                                  !target.trackingNumber ||
+                                  !target.trackingNumber.startsWith("418")
+                                ) {
+                                  target.trackingNumber =
+                                    "418" +
+                                    Math.floor(100000000 + Math.random() * 900000000);
+                                }
+                                updateStore(next);
+                                notify(
+                                  `✓ Sipariş #${ord.orderNumber} Aras Kargo ile Taşıma Durumuna alındı!`
+                                );
+                              }
+                            }}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#1974E5] px-3.5 text-xs font-extrabold text-white shadow-xs hover:bg-[#1461c4] transition"
+                            title="Siparişi kargoya ver ve taşıma durumuna geçir"
+                          >
+                            <span>🚚 Kargoya Ver (Taşıma Durumu)</span>
+                          </button>
+                        )}
+
+                        {ord.status === "shipped" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = structuredClone(store);
+                              const target = next.orders.find((x) => x.id === ord.id);
+                              if (target) {
+                                target.status = "delivered";
+                                updateStore(next);
+                                notify(
+                                  `✓ Sipariş #${ord.orderNumber} başarıyla teslim edildi!`
+                                );
+                              }
+                            }}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-extrabold text-white shadow-xs hover:bg-emerald-700 transition"
+                            title="Siparişi teslim edildi olarak işaretle"
+                          >
+                            <span>✅ Teslim Edildi Yap</span>
+                          </button>
+                        )}
+
+                        {/* Status dropdown for manual override */}
                         <select
                           value={ord.status}
                           onChange={(e) => {
@@ -1652,30 +1997,29 @@ export default function AdminPanelPage() {
                               );
                             }
                           }}
-                          className="h-9 rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
+                          className="h-9 rounded-xl border border-neutral-300 bg-white px-2.5 text-xs font-bold"
                         >
-                          <option value="preparing">
-                            Atölyede / Sıcak Baskıda
-                          </option>
-                          <option value="shipped">Kargoda</option>
-                          <option value="delivered">Teslim Edildi</option>
-                          <option value="returned">İade</option>
+                          <option value="pending">📥 Yeni Sipariş</option>
+                          <option value="preparing">⚡ İşleme Alındı (Bugün)</option>
+                          <option value="shipped">🚚 Kargoda (Taşıma Durumu)</option>
+                          <option value="delivered">✅ Teslim Edildi</option>
+                          <option value="returned">↩️ İade</option>
                         </select>
 
                         <button
                           type="button"
                           onClick={() => setLabelOrder(ord)}
-                          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#1974E5] px-4 text-xs font-bold text-white shadow-2xs hover:bg-[#1461c4]"
+                          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-neutral-900 px-3 text-xs font-bold text-white shadow-2xs hover:bg-neutral-800"
                         >
-                          🏷️ Kargo Etiketi Çıkart
+                          🏷️ Kargo Etiketi
                         </button>
 
                         <button
                           type="button"
                           onClick={() => setInvoiceOrder(ord)}
-                          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
+                          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
                         >
-                          🧾 E-Arşiv Fatura
+                          🧾 Fatura
                         </button>
                       </div>
                     </div>

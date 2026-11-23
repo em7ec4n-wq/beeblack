@@ -73,7 +73,7 @@ export default function CheckoutPage() {
       total: grandTotal,
       paymentMethod,
       paymentStatus: paymentMethod === "credit_card" ? "paid" : "pending",
-      status: "preparing",
+      status: "pending",
       cargoCompany: "Aras Kargo",
       trackingNumber: trackingNum,
       customerNote: customerNote.trim() || undefined,
