@@ -4,8 +4,8 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import type { CartItem, StoreData } from "@/types/store";
 import { INITIAL_STORE } from "@/data/initialStore";
 
-const STORE_KEY = "getto_deri_store_v1";
-const CART_KEY = "getto_deri_cart_v1";
+const STORE_KEY = "beeblack_store_v1";
+const CART_KEY = "beeblack_cart_v1";
 
 interface StoreContextType {
   store: StoreData;
@@ -37,7 +37,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (savedStore) {
         const parsed = JSON.parse(savedStore);
         if (parsed && Array.isArray(parsed.products)) {
-          setStore({ ...INITIAL_STORE, ...parsed });
+          setStore({
+            ...INITIAL_STORE,
+            ...parsed,
+            settings: {
+              ...INITIAL_STORE.settings,
+              ...(parsed.settings || {}),
+              homeBlocks:
+                parsed.settings?.homeBlocks ||
+                INITIAL_STORE.settings.homeBlocks,
+            },
+          });
         }
       }
       const savedCart = localStorage.getItem(CART_KEY);

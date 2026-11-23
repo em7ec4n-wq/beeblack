@@ -55,9 +55,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const handleSpinWheel = (e: React.FormEvent) => {
     e.preventDefault();
     const prizes = [
-      "GETTO200 (200 TL İndirim!)",
+      "BEEBLACK200 (200 TL İndirim!)",
       "KARGO100 (Ücretsiz Kargo & Hediye Paketi)",
-      "GETTO10 (%10 Hoş Geldin İndirimi)",
+      "BEEBLACK10 (%10 Hoş Geldin İndirimi)",
     ];
     setWheelPrize(prizes[Math.floor(Math.random() * prizes.length)]);
     setWheelSpun(true);
@@ -86,7 +86,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* 2. STICKY 3-PART HEADER (Compact & Clean) */}
       <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/95 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-[1440px] items-center justify-between px-4 sm:h-16 sm:px-8">
+        <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-4 sm:h-[74px] sm:px-8">
           {/* Left: Hamburger Button */}
           <div className="flex items-center">
             <button
@@ -109,12 +109,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          {/* Center: Trident Logo */}
+          {/* Center: Prominent BeeBlack Bee-Only Logo */}
           <Link
             href="/"
-            className="flex flex-col items-center justify-center text-neutral-900"
+            className="flex flex-col items-center justify-center text-neutral-900 transition hover:opacity-85 py-1"
           >
-            <TridentLogo className="h-7 w-7 sm:h-8 sm:w-8" />
+            <TridentLogo className="h-14 sm:h-16 md:h-20 w-auto" />
           </Link>
 
           {/* Right: Search & Cart */}
@@ -259,7 +259,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   ✕
                 </button>
-                <TridentLogo className="h-7 w-7 text-neutral-900" />
+                <TridentLogo className="h-9 w-auto" />
                 <div className="w-10" />
               </div>
 
@@ -600,7 +600,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </h3>
             <p className="mt-1.5 text-xs leading-relaxed text-neutral-600">
               {store.settings.freeShippingThreshold}₺ ve üzeri siparişlerinizde
-              DHL / Yurtiçi kargo ücretsizdir.
+              Aras Kargo ile ücretsiz teslimat.
             </p>
           </div>
           <div className="rounded-2xl bg-white p-6 shadow-2xs">
@@ -619,10 +619,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto max-w-[1440px]">
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-5">
             <div>
-              <Link href="/" className="inline-flex items-center gap-2.5">
-                <TridentLogo className="h-9 w-9 text-white" />
-                <span className="text-lg font-extrabold tracking-wider">
-                  {store.settings.brandName}
+              <Link href="/" className="inline-flex items-center gap-2.5 text-white">
+                <TridentLogo className="h-11 w-auto" invert />
+                <span className="font-heading text-lg font-extrabold tracking-widest">
+                  BEEBLACK
                 </span>
               </Link>
               <p className="mt-3 text-xs leading-relaxed text-neutral-400">
@@ -712,7 +712,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <Link
         href="/urun/dors-hakiki-deri-el-cantasi#soru-sor"
-        aria-label="Getto Deri sohbetini aç"
+        aria-label="BeeBlack sohbetini aç"
         className="fixed bottom-5 right-5 z-30 flex h-13 w-13 items-center justify-center rounded-full bg-[#171717] text-white shadow-xl transition hover:scale-105"
       >
         <svg
@@ -738,7 +738,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               ✕
             </button>
             <h3 className="text-xl font-extrabold text-neutral-900">
-              GETTO&apos;da Şansını Çevir! 🎡
+              BeeBlack&apos;te Şansını Çevir! 🎡
             </h3>
             <p className="mt-1 text-xs text-neutral-600">
               E-posta adresini bırak, çarkı çevir ve sana çıkan indirim kodunu

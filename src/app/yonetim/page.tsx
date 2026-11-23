@@ -3,11 +3,25 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useStore, formatTRY } from "@/components/StoreProvider";
-import type { Order, Product } from "@/types/store";
+import type { Order, Product, ColorVariant } from "@/types/store";
 import { TridentLogo } from "@/components/Icons";
+
+const POPULAR_LEATHER_COLORS = [
+  { name: "FLOTER SİYAH", colorHex: "#181818" },
+  { name: "TABA", colorHex: "#A0522D" },
+  { name: "KAHVERENGİ", colorHex: "#4A2E1B" },
+  { name: "LACİVERT", colorHex: "#1C2A39" },
+  { name: "HAKİ YEŞİL", colorHex: "#3D4A39" },
+  { name: "ANTRASİT GRİ", colorHex: "#3A3D40" },
+  { name: "BORDO", colorHex: "#5B1E28" },
+  { name: "VİZON / BEJ", colorHex: "#9E8B76" },
+  { name: "KONYAK DERİ", colorHex: "#8B4513" },
+  { name: "KAPUÇİNO", colorHex: "#7B6352" },
+];
 
 type AdminTab =
   | "dashboard"
+  | "vitrin_tasarim"
   | "siparisler"
   | "urunler"
   | "baski_hediye"
@@ -24,6 +38,13 @@ export default function AdminPanelPage() {
   // Modal states for printing Cargo Label & Invoice
   const [labelOrder, setLabelOrder] = useState<Order | null>(null);
   const [invoiceOrder, setInvoiceOrder] = useState<Order | null>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [batchLabelOrders, setBatchLabelOrders] = useState<Order[] | null>(null);
+  const [batchInvoiceOrders, setBatchInvoiceOrders] = useState<Order[] | null>(null);
+  const [designerViewMode, setDesignerViewMode] = useState<"designer" | "split" | "preview">("designer");
+
+  // Editing existing product variants modal
+  const [editingVariantProduct, setEditingVariantProduct] = useState<Product | null>(null);
 
   // Order filter
   const [orderFilter, setOrderFilter] = useState<
@@ -49,8 +70,49 @@ export default function AdminPanelPage() {
   );
   const [pDesc, setPDesc] = useState("");
 
+  // Product Variants State for New Product Form
+  const [pVariants, setPVariants] = useState<ColorVariant[]>([
+    {
+      id: "v-def-1",
+      name: "FLOTER SİYAH",
+      colorHex: "#181818",
+      image: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=600&q=85",
+      stock: 35,
+    },
+    {
+      id: "v-def-2",
+      name: "TABA",
+      colorHex: "#A0522D",
+      image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&q=85",
+      stock: 25,
+    },
+    {
+      id: "v-def-3",
+      name: "KAHVERENGİ",
+      colorHex: "#4A2E1B",
+      image: "https://images.unsplash.com/photo-1627123424574-724758594e93?auto=format&fit=crop&w=600&q=85",
+      stock: 20,
+    },
+  ]);
+
   // Question answer draft
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+
+  // Storefront Designer & Extra Banner Builder states
+  const [showExtraBannerForm, setShowExtraBannerForm] = useState(false);
+  const [ebTitle, setEbTitle] = useState("");
+  const [ebCta, setEbCta] = useState("Koleksiyonu İncele");
+  const [ebLink, setEbLink] = useState("/kategori/erkek-el-cantasi");
+  const [ebImg, setEbImg] = useState(
+    "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?auto=format&fit=crop&w=1600&q=85"
+  );
+  const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const [previewKey, setPreviewKey] = useState(0);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatSub, setNewCatSub] = useState("");
+  const [newCatImg, setNewCatImg] = useState(
+    "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=900&q=80"
+  );
 
   // New Review Form in Admin
   const [newRevAuthor, setNewRevAuthor] = useState("");
@@ -82,6 +144,29 @@ export default function AdminPanelPage() {
     reader.readAsDataURL(files[0]);
   };
 
+  // handle local video upload from phone/computer (MP4/MOV/WebM)
+  const handleVideoFile = (
+    files: FileList | null,
+    onDone: (videoUrl: string) => void
+  ) => {
+    if (!files || !files[0]) return;
+    const file = files[0];
+    if (file.size <= 5 * 1024 * 1024) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          onDone(reader.result);
+          notify(`✓ Video yüklendi: ${file.name}`);
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const blobUrl = URL.createObjectURL(file);
+      onDone(blobUrl);
+      notify(`✓ Video seçildi: ${file.name}`);
+    }
+  };
+
   // Live metrics
   const totalRevenue = store.orders.reduce((s, o) => s + o.total, 0);
   const shippedOrdersCount = store.orders.filter(
@@ -105,36 +190,38 @@ export default function AdminPanelPage() {
       .replace(/[^a-z0-9ğüşıöç]+/g, "-")
       .replace(/^-+|-+$/g, "");
 
+    const finalVariants: ColorVariant[] =
+      pVariants.length > 0
+        ? pVariants.map((v, i) => ({
+            ...v,
+            id: v.id || `v-${Date.now()}-${i}`,
+            image: v.image || pImage,
+          }))
+        : [
+            {
+              id: `v-${Date.now()}-1`,
+              name: "FLOTER SİYAH",
+              colorHex: "#181818",
+              image: pImage,
+              stock: 30,
+            },
+          ];
+
     const newProd: Product = {
       id: `prod-${Date.now()}`,
       sku: pSku.trim() || `GTT-${Date.now().toString().slice(-4)}`,
       slug: `${slug}-${Date.now().toString().slice(-3)}`,
       name: pName.trim(),
-      brand: "GETTO DERI",
+      brand: store.settings.brandName || "BEEBLACK",
       categorySlug: pCat,
       price: Number(pPrice) || 1999.9,
       compareAtPrice: Number(pCompare) || 2499.9,
       rating: 4.95,
       reviewCount: 12,
       image: pImage,
-      gallery: [pImage],
+      gallery: Array.from(new Set([pImage, ...finalVariants.map((v) => v.image).filter(Boolean)])),
       videoUrl: pVideo.trim() || undefined,
-      variants: [
-        {
-          id: `v-${Date.now()}-1`,
-          name: "LACİVERT",
-          colorHex: "#243754",
-          image: pImage,
-          stock: 25,
-        },
-        {
-          id: `v-${Date.now()}-2`,
-          name: "SİYAH",
-          colorHex: "#181818",
-          image: pImage,
-          stock: 30,
-        },
-      ],
+      variants: finalVariants,
       specs: [
         { icon: "height", label: "Yükseklik", value: pHeight || "11 CM" },
         { icon: "width", label: "Genişlik", value: pWidth || "18.5 CM" },
@@ -142,9 +229,9 @@ export default function AdminPanelPage() {
       ],
       description:
         pDesc.trim() ||
-        "%100 el yapımı hakiki deri, kişiye özel sıcak baskı ve lazer isim baskısına uygun özel tasarım.",
+        "%100 el yapımı hakiki deri, kişiye özel sıcak baskı ve özel hediye kutusu seçeneğiyle.",
       materialNote:
-        "Getto Deri ürünlerinde kullanılan malzeme %100 hakiki deridir.",
+        `${store.settings.brandName || "BeeBlack"} ürünlerinde kullanılan malzeme %100 hakiki deridir.`,
       deliveryEstimate:
         "Bugün sipariş verirseniz, 1-2 iş günü içerisinde kargoya teslim edilir.",
       personalizationEnabled: true,
@@ -164,6 +251,11 @@ export default function AdminPanelPage() {
 
   const TABS: { key: AdminTab; label: string; badge?: string | number }[] = [
     { key: "dashboard", label: "📊 Canlı Performans" },
+    {
+      key: "vitrin_tasarim",
+      label: "🎨 Mağaza Düzenleme (Vitrin & Banner)",
+      badge: "Trendyol",
+    },
     {
       key: "siparisler",
       label: "📦 Sipariş & Kargo & Fatura",
@@ -198,7 +290,7 @@ export default function AdminPanelPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F3F4F6] text-neutral-900">
+    <div className="admin-font min-h-screen bg-[#F3F4F6] font-sans text-neutral-900 tracking-normal antialiased">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-5 right-5 z-50 rounded-2xl bg-neutral-900 px-5 py-3 text-xs font-bold text-white shadow-xl">
@@ -530,8 +622,834 @@ export default function AdminPanelPage() {
         )}
 
         {/* ===================================================== */}
-        {/* TAB 2: SİPARİŞLER, KARGODAKİLER, KARGO ETİKETİ & FATURA */}
+        {/* TAB: TRENDYOL STYLE STOREFRONT & BANNER DESIGNER      */}
         {/* ===================================================== */}
+        {activeTab === "vitrin_tasarim" && (
+          <div className="space-y-6">
+            {/* Header Info & View Mode Switcher */}
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-neutral-200 bg-white p-5 shadow-2xs">
+              <div>
+                <h2 className="text-lg font-extrabold text-neutral-900">
+                  🎨 Mağaza Düzenleme & Vitrin Tasarım Merkezi
+                </h2>
+                <p className="mt-1 text-xs text-neutral-600">
+                  Trendyol mağaza düzenleme alanı gibi: Ana sayfa bloklarını dilediğiniz gibi sıralayın (↑/↓), ekstra kampanya bannerları ekleyin, fotoğrafları doğrudan telefon/bilgisayarınızdan yükleyin ve canlı demoda anında görün.
+                </p>
+              </div>
+
+              {/* View Mode Controls */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDesignerViewMode("designer")}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                    designerViewMode === "designer"
+                      ? "bg-neutral-900 text-white"
+                      : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                  }`}
+                >
+                  ⚙️ Mağaza Düzenleme
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDesignerViewMode("preview")}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                    designerViewMode === "preview"
+                      ? "bg-neutral-900 text-white"
+                      : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                  }`}
+                >
+                  📱 Canlı Demo Önizleme
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDesignerViewMode("split")}
+                  className={`hidden sm:inline-flex rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                    designerViewMode === "split"
+                      ? "bg-[#1974E5] text-white"
+                      : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                  }`}
+                >
+                  ◫ İkili Görünüm (Düzenle + Önizle)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewKey((k) => k + 1);
+                    notify("🔄 Canlı mağaza önizlemesi yenilendi");
+                  }}
+                  className="rounded-xl border border-neutral-300 bg-white px-3 py-2 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
+                  title="Önizlemeyi Yenile"
+                >
+                  🔄 Yenile
+                </button>
+                <Link
+                  href="/"
+                  target="_blank"
+                  className="rounded-xl bg-[#1974E5] px-4 py-2 text-xs font-extrabold text-white shadow-xs hover:bg-[#1461c4]"
+                >
+                  Canlı Vitrini Aç ↗
+                </Link>
+              </div>
+            </div>
+
+            {/* If Preview Only Mode */}
+            {designerViewMode === "preview" && (
+              <div className="rounded-3xl border border-neutral-200 bg-neutral-900 p-6 shadow-xl text-white">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-neutral-800 pb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse" />
+                    <h3 className="text-sm font-bold">Canlı Mağaza Demosu (Gerçek Zamanlı Önizleme)</h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewDevice("mobile")}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
+                        previewDevice === "mobile"
+                          ? "bg-white text-neutral-900"
+                          : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                      }`}
+                    >
+                      📱 Mobil (390px)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewDevice("desktop")}
+                      className={`rounded-xl px-3 py-1.5 text-xs font-bold ${
+                        previewDevice === "desktop"
+                          ? "bg-white text-neutral-900"
+                          : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                      }`}
+                    >
+                      💻 Masaüstü (Geniş)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-center bg-neutral-950/80 p-4 rounded-2xl overflow-hidden">
+                  <iframe
+                    key={previewKey}
+                    src="/"
+                    title="Canlı Mağaza Önizleme"
+                    className={`border-0 bg-white transition-all duration-300 ${
+                      previewDevice === "mobile"
+                        ? "h-[760px] w-[390px] rounded-[36px] shadow-2xl border-[8px] border-neutral-800"
+                        : "h-[760px] w-full rounded-2xl shadow-xl"
+                    }`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Designer / Split View Container */}
+            {designerViewMode !== "preview" && (
+              <div className={`grid grid-cols-1 gap-6 ${designerViewMode === "split" ? "xl:grid-cols-12" : ""}`}>
+                <div className={`space-y-6 ${designerViewMode === "split" ? "xl:col-span-7" : ""}`}>
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                    {/* 1. HOME PAGE SECTION ORDER & VISIBILITY (Trendyol Blok Sıralama) */}
+                    <div className="space-y-4 rounded-3xl border border-neutral-200 bg-white p-6 shadow-2xs lg:col-span-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-base font-extrabold text-neutral-900">
+                            1. Blok Sıralaması
+                          </h3>
+                          <p className="mt-0.5 text-xs text-neutral-500">
+                            Oklarla bölümleri taşıyın:
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowExtraBannerForm((v) => !v)}
+                          className="rounded-xl bg-[#1974E5] px-3 py-1.5 text-xs font-bold text-white shadow-2xs hover:bg-[#1461c4]"
+                        >
+                          {showExtraBannerForm ? "✕ Kapat" : "＋ Ekstra Banner Ekle"}
+                        </button>
+                      </div>
+
+                      {/* Extra Custom Banner Creation Form */}
+                      {showExtraBannerForm && (
+                        <div className="rounded-2xl border-2 border-dashed border-[#1974E5]/40 bg-blue-50/40 p-4 space-y-3">
+                          <p className="text-xs font-extrabold text-[#1974E5]">
+                            🎉 Yeni Kampanya Bannerı Oluştur
+                          </p>
+
+                          <div>
+                            <label className="block text-[11px] font-bold text-neutral-700">
+                              Banner Başlığı
+                            </label>
+                            <input
+                              value={ebTitle}
+                              onChange={(e) => setEbTitle(e.target.value)}
+                              placeholder="Örn: VINTAGE DERİDE NET %20 İNDİRİM"
+                              className="mt-1 h-9 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[11px] font-bold text-neutral-700">
+                                Buton Yazısı
+                              </label>
+                              <input
+                                value={ebCta}
+                                onChange={(e) => setEbCta(e.target.value)}
+                                placeholder="Örn: Fırsatları Gör"
+                                className="mt-1 h-8 w-full rounded-xl border border-neutral-300 bg-white px-2.5 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-neutral-700">
+                                Yönlendirilecek Sayfa
+                              </label>
+                              <input
+                                value={ebLink}
+                                onChange={(e) => setEbLink(e.target.value)}
+                                placeholder="/kategori/erkek-el-cantasi"
+                                className="mt-1 h-8 w-full rounded-xl border border-neutral-300 bg-white px-2.5 text-xs font-mono"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <label className="block text-[11px] font-bold text-neutral-700">
+                                Banner Fotoğrafı
+                              </label>
+                              <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-neutral-900 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-neutral-800">
+                                📷 Cihazdan Seç
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) =>
+                                    handlePhotoFile(e.target.files, (url) => setEbImg(url))
+                                  }
+                                />
+                              </label>
+                            </div>
+
+                            {/* Instant Photo Preview */}
+                            <div className="mt-2 h-24 w-full overflow-hidden rounded-xl border border-neutral-300 bg-neutral-100">
+                              <img
+                                src={ebImg}
+                                alt="Seçilen Banner Görseli"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!ebTitle.trim()) {
+                                notify("⚠️ Lütfen banner için bir başlık girin.");
+                                return;
+                              }
+                              const newBannerId = `banner-${Date.now()}`;
+                              const next = structuredClone(store);
+                              next.settings.homeBlocks.push({
+                                id: newBannerId,
+                                type: "custom_banner",
+                                title: `Banner: ${ebTitle.trim()}`,
+                                enabled: true,
+                                bannerData: {
+                                  image: ebImg,
+                                  heading: ebTitle.trim(),
+                                  ctaText: ebCta.trim() || "İncele",
+                                  linkUrl: ebLink.trim() || "/kategori/erkek-el-cantasi",
+                                },
+                              });
+                              updateStore(next);
+                              setShowExtraBannerForm(false);
+                              setEbTitle("");
+                              setPreviewKey((k) => k + 1);
+                              notify("✓ Yeni kampanya bannerı vitrine eklendi! Sırasını yukarı/aşağı taşıyabilirsiniz.");
+                            }}
+                            className="h-9 w-full rounded-xl bg-[#1974E5] text-xs font-extrabold text-white shadow hover:bg-[#1461c4]"
+                          >
+                            💾 Bannerı Kaydet & Vitrine Ekle
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        {(store.settings.homeBlocks || []).map((blk, idx) => (
+                          <div
+                            key={blk.id}
+                            className={`flex items-center justify-between gap-2 rounded-2xl border p-3 transition ${
+                              blk.enabled
+                                ? "border-neutral-200 bg-[#FAFAFA]"
+                                : "border-dashed border-neutral-200 bg-neutral-100/60 opacity-60"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-neutral-900 text-[11px] font-bold text-white">
+                                {idx + 1}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-bold text-neutral-900">
+                                  {blk.title}
+                                </span>
+                                {(blk.id.startsWith("banner-") || blk.type === "custom_banner") && (
+                                  <span className="rounded-md bg-blue-100 px-1.5 py-0.5 text-[9px] font-extrabold text-blue-800">
+                                    ÖZEL BANNER
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => {
+                                  const next = structuredClone(store);
+                                  const arr = next.settings.homeBlocks;
+                                  [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                  notify("✓ Blok sırası güncellendi");
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-300 bg-white text-xs font-bold hover:bg-neutral-100 disabled:opacity-30"
+                                title="Yukarı Taşı"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === (store.settings.homeBlocks || []).length - 1}
+                                onClick={() => {
+                                  const next = structuredClone(store);
+                                  const arr = next.settings.homeBlocks;
+                                  [arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]];
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                  notify("✓ Blok sırası güncellendi");
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-300 bg-white text-xs font-bold hover:bg-neutral-100 disabled:opacity-30"
+                                title="Aşağı Taşı"
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = structuredClone(store);
+                                  next.settings.homeBlocks[idx].enabled = !blk.enabled;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                  notify(
+                                    blk.enabled
+                                      ? "Bölüm gizlendi"
+                                      : "Bölüm vitrinde aktifleştirildi"
+                                  );
+                                }}
+                                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${
+                                  blk.enabled
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-neutral-200 text-neutral-600"
+                                }`}
+                              >
+                                {blk.enabled ? "Açık" : "Gizli"}
+                              </button>
+                              {(blk.id.startsWith("banner-") || blk.type === "custom_banner") && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next = structuredClone(store);
+                                    next.settings.homeBlocks.splice(idx, 1);
+                                    updateStore(next);
+                                    setPreviewKey((k) => k + 1);
+                                    notify("✓ Kampanya bannerı silindi");
+                                  }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-xs font-bold text-rose-600 hover:bg-rose-100"
+                                  title="Bannerı Sil"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 2. BANNER & VISUAL CONTENT EDITOR */}
+                    <div className="space-y-5 rounded-3xl border border-neutral-200 bg-white p-6 shadow-2xs lg:col-span-7">
+                      <h3 className="text-base font-extrabold text-neutral-900">
+                        2. Ana Banner, Duyuru Bandı & Video Düzenleme
+                      </h3>
+
+                      {/* Hero Banner Controls */}
+                      <div className="grid grid-cols-1 gap-4 rounded-2xl bg-[#F6F6F6] p-4 sm:grid-cols-12">
+                        <div className="sm:col-span-4">
+                          <img
+                            src={store.settings.heroImage}
+                            alt="Ana Banner"
+                            className="h-28 w-full rounded-xl object-cover"
+                          />
+                          <label className="mt-2 flex h-9 cursor-pointer items-center justify-center rounded-xl bg-neutral-900 text-xs font-bold text-white hover:bg-neutral-700">
+                            📷 Banner Fotoğrafı Değiştir
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                handlePhotoFile(e.target.files, (url) => {
+                                  const next = structuredClone(store);
+                                  next.settings.heroImage = url;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+
+                        <div className="space-y-3 sm:col-span-8">
+                          <div>
+                            <label className="block text-[11px] font-bold text-neutral-600">
+                              Ana Banner Başlığı (H1)
+                            </label>
+                            <input
+                              value={store.settings.heroTitle}
+                              onChange={(e) => {
+                                const next = structuredClone(store);
+                                next.settings.heroTitle = e.target.value;
+                                updateStore(next);
+                                setPreviewKey((k) => k + 1);
+                              }}
+                              className="mt-1 h-10 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm font-bold"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2.5">
+                            <div>
+                              <label className="block text-[11px] font-bold text-neutral-600">
+                                Banner Buton Yazısı
+                              </label>
+                              <input
+                                value={store.settings.heroCta}
+                                onChange={(e) => {
+                                  const next = structuredClone(store);
+                                  next.settings.heroCta = e.target.value;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                }}
+                                className="mt-1 h-9 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-neutral-600">
+                                Ürün Slider Başlığı
+                              </label>
+                              <input
+                                value={store.settings.featuredTitle || "YILBAŞI"}
+                                onChange={(e) => {
+                                  const next = structuredClone(store);
+                                  next.settings.featuredTitle = e.target.value;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                }}
+                                className="mt-1 h-9 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-neutral-600">
+                              Banner Görsel URL
+                            </label>
+                            <input
+                              value={store.settings.heroImage}
+                              onChange={(e) => {
+                                const next = structuredClone(store);
+                                next.settings.heroImage = e.target.value;
+                                updateStore(next);
+                                setPreviewKey((k) => k + 1);
+                              }}
+                              className="mt-1 h-9 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Top Marquee Announcements */}
+                      <div>
+                        <label className="block text-xs font-bold text-neutral-800">
+                          📢 En Üstteki Kayan Duyuru Yazıları (Her satıra 1 duyuru)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={store.settings.announcements.join("\n")}
+                          onChange={(e) => {
+                            const next = structuredClone(store);
+                            next.settings.announcements = e.target.value
+                              .split("\n")
+                              .map((s) => s.trim())
+                              .filter(Boolean);
+                            updateStore(next);
+                            setPreviewKey((k) => k + 1);
+                          }}
+                          className="mt-1.5 w-full rounded-xl border border-neutral-300 p-3 text-xs font-semibold"
+                        />
+                      </div>
+
+                      {/* Lookbook & Promo Video */}
+                      <div className="space-y-4 rounded-2xl bg-[#F6F6F6] p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <label className="block text-xs font-bold text-neutral-800">
+                              🎬 Ana Sayfa Tanıtım Videosu (Telefondan / PC'den Yükle)
+                            </label>
+                            <p className="text-[11px] text-neutral-500">
+                              Cihazınızdaki video dosyasını doğrudan seçebilirsiniz
+                            </p>
+                          </div>
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#1974E5] px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#1461c4]">
+                            📹 Video Dosyası Seç
+                            <input
+                              type="file"
+                              accept="video/*"
+                              className="hidden"
+                              onChange={(e) =>
+                                handleVideoFile(e.target.files, (url) => {
+                                  const next = structuredClone(store);
+                                  next.settings.promoVideoUrl = url;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+
+                        {store.settings.promoVideoUrl && (
+                          <div className="overflow-hidden rounded-xl border border-neutral-300 bg-black">
+                            <video
+                              controls
+                              src={store.settings.promoVideoUrl}
+                              className="h-44 w-full object-contain bg-black"
+                            />
+                            <div className="bg-neutral-900 px-3 py-1.5 text-center text-[11px] font-semibold text-neutral-300">
+                              ▶️ Önizleme: Tanıtım videosunu buradan doğrudan izleyip kontrol edebilirsiniz.
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div>
+                            <label className="block text-[11px] font-bold text-neutral-600">
+                              Video Bağlantı Linki (MP4 / Web URL)
+                            </label>
+                            <input
+                              value={store.settings.promoVideoUrl}
+                              onChange={(e) => {
+                                const next = structuredClone(store);
+                                next.settings.promoVideoUrl = e.target.value;
+                                updateStore(next);
+                                setPreviewKey((k) => k + 1);
+                              }}
+                              placeholder="https://...mp4"
+                              className="mt-1 h-9 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs font-medium"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-bold text-neutral-600">
+                              ✨ Lookbook Slogan Başlığı
+                            </label>
+                            <input
+                              value={
+                                store.settings.lookbookTitle ||
+                                "Derinin ardında başka bir dünya."
+                              }
+                              onChange={(e) => {
+                                const next = structuredClone(store);
+                                next.settings.lookbookTitle = e.target.value;
+                                updateStore(next);
+                                setPreviewKey((k) => k + 1);
+                              }}
+                              className="mt-1 h-9 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. CATEGORY MANAGEMENT (Add, Edit Image/Name, Toggle on Homepage, Delete) */}
+                  <div className="space-y-5 rounded-3xl border border-neutral-200 bg-white p-6 shadow-2xs">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-base font-extrabold text-neutral-900">
+                          3. Kategori Yönetimi (Ekle, Düzenle, Görsel Değiştir, Sırala)
+                        </h3>
+                        <p className="text-xs text-neutral-500">
+                          Ana sayfadaki kategori kartlarını ve üst menüdeki kategorileri buradan istediğiniz gibi değiştirebilirsiniz.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Add New Category Bar */}
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (!newCatName.trim()) return;
+                        const slug = newCatName
+                          .toLocaleLowerCase("tr-TR")
+                          .replace(/[^a-z0-9ğüşıöç]+/g, "-")
+                          .replace(/^-+|-+$/g, "");
+                        const next = structuredClone(store);
+                        next.categories.push({
+                          slug: `${slug}-${Date.now().toString().slice(-3)}`,
+                          name: newCatName.trim().toLocaleUpperCase("tr-TR"),
+                          subtitle: newCatSub.trim() || "Özel Hakiki Deri Koleksiyonu",
+                          image: newCatImg,
+                          showOnHome: true,
+                        });
+                        updateStore(next);
+                        setNewCatName("");
+                        setNewCatSub("");
+                        setPreviewKey((k) => k + 1);
+                        notify("✓ Yeni kategori eklendi!");
+                      }}
+                      className="grid grid-cols-1 gap-3 rounded-2xl border border-dashed border-[#1974E5]/40 bg-blue-50/30 p-4 sm:grid-cols-12"
+                    >
+                      <div className="sm:col-span-4">
+                        <input
+                          required
+                          value={newCatName}
+                          onChange={(e) => setNewCatName(e.target.value)}
+                          placeholder="Yeni Kategori Adı (Örn: DERİ KEMER)"
+                          className="h-10 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
+                        />
+                      </div>
+                      <div className="sm:col-span-4">
+                        <input
+                          value={newCatSub}
+                          onChange={(e) => setNewCatSub(e.target.value)}
+                          placeholder="Kısa Açıklama (İsteğe bağlı)"
+                          className="h-10 w-full rounded-xl border border-neutral-300 bg-white px-3 text-xs"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 sm:col-span-4">
+                        {newCatImg && (
+                          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-neutral-300 bg-white shadow-2xs" title="Seçilen Görsel Önizlemesi">
+                            <img
+                              src={newCatImg}
+                              alt="Kategori Görsel Önizleme"
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        )}
+                        <label className="inline-flex h-10 cursor-pointer items-center rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold text-neutral-800 hover:bg-neutral-50">
+                          📷 Görsel
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) =>
+                              handlePhotoFile(e.target.files, (url) =>
+                                setNewCatImg(url)
+                              )
+                            }
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          className="h-10 flex-1 rounded-xl bg-[#1974E5] px-4 text-xs font-extrabold text-white"
+                        >
+                          ＋ Kategori Ekle
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Category Cards Grid */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {store.categories.map((cat, idx) => (
+                        <div
+                          key={cat.slug}
+                          className="flex flex-col justify-between rounded-2xl border border-neutral-200 bg-[#FAFAFA] p-4"
+                        >
+                          <div className="flex gap-3.5">
+                            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                              <img
+                                src={cat.image}
+                                alt={cat.name}
+                                className="h-full w-full object-cover"
+                              />
+                              <label className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/45 text-[10px] font-bold text-white opacity-0 transition hover:opacity-100">
+                                Değiştir
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) =>
+                                    handlePhotoFile(e.target.files, (url) => {
+                                      const next = structuredClone(store);
+                                      next.categories[idx].image = url;
+                                      updateStore(next);
+                                      setPreviewKey((k) => k + 1);
+                                    })
+                                  }
+                                />
+                              </label>
+                            </div>
+
+                            <div className="flex-1 space-y-1.5">
+                              <input
+                                value={cat.name}
+                                onChange={(e) => {
+                                  const next = structuredClone(store);
+                                  next.categories[idx].name = e.target.value;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                }}
+                                className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1 text-xs font-extrabold text-neutral-900"
+                              />
+                              <input
+                                value={cat.subtitle}
+                                onChange={(e) => {
+                                  const next = structuredClone(store);
+                                  next.categories[idx].subtitle = e.target.value;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                }}
+                                className="w-full rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-[11px] text-neutral-600"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-between border-t border-neutral-200/70 pt-2.5">
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-neutral-700">
+                              <input
+                                type="checkbox"
+                                checked={cat.showOnHome}
+                                onChange={(e) => {
+                                  const next = structuredClone(store);
+                                  next.categories[idx].showOnHome = e.target.checked;
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                }}
+                                className="h-4 w-4 accent-[#1974E5]"
+                              />
+                              <span>Ana Sayfada Göster</span>
+                            </label>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => {
+                                  const next = structuredClone(store);
+                                  const arr = next.categories;
+                                  [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                }}
+                                className="rounded-lg border border-neutral-300 bg-white px-2 py-1 text-[11px] font-bold disabled:opacity-30"
+                              >
+                                ←
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === store.categories.length - 1}
+                                onClick={() => {
+                                  const next = structuredClone(store);
+                                  const arr = next.categories;
+                                  [arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]];
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                }}
+                                className="rounded-lg border border-neutral-300 bg-white px-2 py-1 text-[11px] font-bold disabled:opacity-30"
+                              >
+                                →
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = structuredClone(store);
+                                  next.categories.splice(idx, 1);
+                                  updateStore(next);
+                                  setPreviewKey((k) => k + 1);
+                                  notify("Kategori silindi");
+                                }}
+                                className="rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600"
+                              >
+                                Sil
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* If Split Mode: Right Column Interactive Preview */}
+                {designerViewMode === "split" && (
+                  <div className="hidden xl:block xl:col-span-5 sticky top-24 self-start">
+                    <div className="rounded-3xl border border-neutral-300 bg-neutral-900 p-4 text-white shadow-xl">
+                      <div className="mb-3 flex items-center justify-between border-b border-neutral-800 pb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-xs font-bold">Canlı Mağaza Demosu</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDevice("mobile")}
+                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${
+                              previewDevice === "mobile"
+                                ? "bg-white text-neutral-900"
+                                : "bg-neutral-800 text-neutral-400 hover:text-white"
+                            }`}
+                          >
+                            📱 Mobil
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewDevice("desktop")}
+                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${
+                              previewDevice === "desktop"
+                                ? "bg-white text-neutral-900"
+                                : "bg-neutral-800 text-neutral-400 hover:text-white"
+                            }`}
+                          >
+                            💻 Masaüstü
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewKey((k) => k + 1);
+                              notify("🔄 Canlı önizleme yenilendi");
+                            }}
+                            className="rounded-lg bg-neutral-800 px-2 py-1 text-[11px] font-bold text-neutral-300 hover:bg-neutral-700"
+                            title="Yenile"
+                          >
+                            🔄
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-center bg-neutral-950 p-2 rounded-2xl overflow-hidden">
+                        <iframe
+                          key={previewKey}
+                          src="/"
+                          title="Split Önizleme"
+                          className={`border-0 bg-white transition-all ${
+                            previewDevice === "mobile"
+                              ? "h-[680px] w-[360px] rounded-[28px] border-[6px] border-neutral-800 shadow-2xl"
+                              : "h-[680px] w-full rounded-xl shadow-xl"
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {activeTab === "siparisler" && (
           <div className="space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-white p-4">
@@ -562,84 +1480,205 @@ export default function AdminPanelPage() {
                     className={`rounded-xl px-3.5 py-2 text-xs font-bold ${
                       orderFilter === f.k
                         ? "bg-neutral-900 text-white"
-                        : "bg-neutral-100 text-neutral-700"
+                        : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
                     }`}
                   >
                     {f.label}
                   </button>
                 ))}
               </div>
+
+              {/* Select All Checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer rounded-xl bg-neutral-100 px-3 py-2 text-xs font-bold text-neutral-800 hover:bg-neutral-200">
+                <input
+                  type="checkbox"
+                  checked={
+                    filteredOrders.length > 0 &&
+                    filteredOrders.every((o) => selectedOrderIds.includes(o.id))
+                  }
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      const allIds = Array.from(
+                        new Set([...selectedOrderIds, ...filteredOrders.map((o) => o.id)])
+                      );
+                      setSelectedOrderIds(allIds);
+                    } else {
+                      const currentFilteredIds = new Set(filteredOrders.map((o) => o.id));
+                      setSelectedOrderIds(
+                        selectedOrderIds.filter((id) => !currentFilteredIds.has(id))
+                      );
+                    }
+                  }}
+                  className="h-4 w-4 rounded accent-[#1974E5]"
+                />
+                <span>Tümünü Seç ({filteredOrders.length})</span>
+              </label>
             </div>
 
-            <div className="space-y-4">
-              {filteredOrders.map((ord, idx) => (
-                <div
-                  key={ord.id}
-                  className="rounded-3xl border border-neutral-200 bg-white p-5 shadow-2xs"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 pb-4">
-                    <div>
-                      <div className="flex items-center gap-2.5">
-                        <span className="font-mono text-base font-extrabold text-neutral-900">
-                          Sipariş #{ord.orderNumber}
-                        </span>
-                        <span className="rounded-lg bg-neutral-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-neutral-700">
-                          Fatura: {ord.invoiceNumber}
-                        </span>
-                        <span className="text-xs text-neutral-500">
-                          {ord.createdAt}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-neutral-600">
-                        <strong>Müşteri:</strong> {ord.customerName} •{" "}
-                        {ord.customerPhone} • {ord.address}, {ord.district}/
-                        {ord.city}
-                      </p>
-                    </div>
+            {/* BATCH OPERATIONS ACTION BAR ("Toplu İşlem Yap") */}
+            {selectedOrderIds.length > 0 && (
+              <div className="sticky top-16 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#1974E5] bg-blue-50/95 p-4 shadow-lg backdrop-blur-xs">
+                <div className="flex items-center gap-2 font-black text-sm text-[#1974E5]">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1974E5] text-xs text-white">
+                    {selectedOrderIds.length}
+                  </span>
+                  <span>Sipariş Seçildi (Toplu İşlem)</span>
+                </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <select
-                        value={ord.status}
-                        onChange={(e) => {
-                          const next = structuredClone(store);
-                          const target = next.orders.find(
-                            (x) => x.id === ord.id
-                          );
-                          if (target) {
-                            target.status = e.target.value as Order["status"];
-                            updateStore(next);
-                            notify(
-                              `✓ Sipariş #${ord.orderNumber} durumu güncellendi`
-                            );
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sel = store.orders.filter((o) =>
+                        selectedOrderIds.includes(o.id)
+                      );
+                      setBatchLabelOrders(sel);
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#1974E5] px-4 text-xs font-bold text-white shadow-xs hover:bg-[#1461c4]"
+                  >
+                    🏷️ Toplu Barkod & Kargo Etiketi Çıkar ({selectedOrderIds.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sel = store.orders.filter((o) =>
+                        selectedOrderIds.includes(o.id)
+                      );
+                      setBatchInvoiceOrders(sel);
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
+                  >
+                    🧾 Toplu E-Arşiv Fatura Yazdır ({selectedOrderIds.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = structuredClone(store);
+                      next.orders.forEach((o) => {
+                        if (selectedOrderIds.includes(o.id)) {
+                          o.status = "shipped";
+                          o.cargoCompany = "Aras Kargo";
+                          if (!o.trackingNumber || !o.trackingNumber.startsWith("418")) {
+                            o.trackingNumber =
+                              "418" +
+                              Math.floor(100000000 + Math.random() * 900000000);
                           }
-                        }}
-                        className="h-9 rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
-                      >
-                        <option value="preparing">
-                          Atölyede / Sıcak Baskıda
-                        </option>
-                        <option value="shipped">Kargoda</option>
-                        <option value="delivered">Teslim Edildi</option>
-                        <option value="returned">İade</option>
-                      </select>
+                        }
+                      });
+                      updateStore(next);
+                      notify(
+                        `✓ Seçili ${selectedOrderIds.length} sipariş Aras Kargo takip koduyla kargoya verildi!`
+                      );
+                    }}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-4 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
+                  >
+                    🚚 Toplu Aras Kargo&apos;ya Ver
+                  </button>
 
-                      <button
-                        type="button"
-                        onClick={() => setLabelOrder(ord)}
-                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#1974E5] px-4 text-xs font-bold text-white shadow-2xs hover:bg-[#1461c4]"
-                      >
-                        🏷️ Kargo Etiketi Çıkart
-                      </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedOrderIds([])}
+                    className="h-9 rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold text-neutral-600 hover:bg-neutral-100"
+                  >
+                    ✕ Seçimi Kaldır
+                  </button>
+                </div>
+              </div>
+            )}
 
-                      <button
-                        type="button"
-                        onClick={() => setInvoiceOrder(ord)}
-                        className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
-                      >
-                        🧾 E-Arşiv Fatura
-                      </button>
+            <div className="space-y-4">
+              {filteredOrders.map((ord, idx) => {
+                const isSelected = selectedOrderIds.includes(ord.id);
+                return (
+                  <div
+                    key={ord.id}
+                    className={`rounded-3xl border transition p-5 shadow-2xs ${
+                      isSelected
+                        ? "border-[#1974E5] bg-blue-50/20"
+                        : "border-neutral-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 pb-4">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedOrderIds((prev) => [...prev, ord.id]);
+                            } else {
+                              setSelectedOrderIds((prev) =>
+                                prev.filter((id) => id !== ord.id)
+                              );
+                            }
+                          }}
+                          className="mt-1 h-5 w-5 rounded accent-[#1974E5] cursor-pointer"
+                        />
+                        <div>
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-mono text-base font-extrabold text-neutral-900">
+                              Sipariş #{ord.orderNumber}
+                            </span>
+                            <span className="rounded-lg bg-neutral-100 px-2.5 py-0.5 font-mono text-xs font-semibold text-neutral-700">
+                              Fatura: {ord.invoiceNumber}
+                            </span>
+                            <span className="text-xs text-neutral-500">
+                              {ord.createdAt}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-neutral-600">
+                            <strong>Müşteri:</strong> {ord.customerName} •{" "}
+                            {ord.customerPhone} • {ord.address}, {ord.district}/
+                            {ord.city}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          value={ord.status}
+                          onChange={(e) => {
+                            const next = structuredClone(store);
+                            const target = next.orders.find(
+                              (x) => x.id === ord.id
+                            );
+                            if (target) {
+                              target.status = e.target.value as Order["status"];
+                              updateStore(next);
+                              notify(
+                                `✓ Sipariş #${ord.orderNumber} durumu güncellendi`
+                              );
+                            }
+                          }}
+                          className="h-9 rounded-xl border border-neutral-300 bg-white px-3 text-xs font-bold"
+                        >
+                          <option value="preparing">
+                            Atölyede / Sıcak Baskıda
+                          </option>
+                          <option value="shipped">Kargoda</option>
+                          <option value="delivered">Teslim Edildi</option>
+                          <option value="returned">İade</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={() => setLabelOrder(ord)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-[#1974E5] px-4 text-xs font-bold text-white shadow-2xs hover:bg-[#1461c4]"
+                        >
+                          🏷️ Kargo Etiketi Çıkart
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setInvoiceOrder(ord)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-bold text-neutral-800 hover:bg-neutral-50"
+                        >
+                          🧾 E-Arşiv Fatura
+                        </button>
+                      </div>
                     </div>
-                  </div>
 
                   {/* Order Line Items with Personalization & Gift Wrap Details */}
                   <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
@@ -723,7 +1762,8 @@ export default function AdminPanelPage() {
                     </div>
                   </div>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
         )}
@@ -892,15 +1932,227 @@ export default function AdminPanelPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold">
-                      🎬 Ürün Videosu (MP4 Linki veya Dosya)
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-neutral-800">
+                        🎬 Ürün Videosu (Telefondan Yükle veya Link Gir)
+                      </label>
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-[#1974E5] px-2.5 py-1 text-xs font-bold text-white hover:bg-[#1461c4]">
+                        📹 Video Seç
+                        <input
+                          type="file"
+                          accept="video/*"
+                          className="hidden"
+                          onChange={(e) =>
+                            handleVideoFile(e.target.files, (url) =>
+                              setPVideo(url)
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
                     <input
                       value={pVideo}
                       onChange={(e) => setPVideo(e.target.value)}
-                      placeholder="https://...mp4"
+                      placeholder="https://...mp4 (veya yukarıdaki butondan doğrudan telefon/PC'den video seçin)"
                       className="mt-1 h-10 w-full rounded-xl border border-neutral-300 px-3 text-xs"
                     />
+                    {pVideo && (
+                      <div className="mt-2 overflow-hidden rounded-xl border border-neutral-300 bg-black">
+                        <video
+                          controls
+                          src={pVideo}
+                          className="h-36 w-full object-contain bg-black"
+                        />
+                        <div className="bg-neutral-900 px-3 py-1 text-center text-[10px] font-semibold text-neutral-300">
+                          ▶️ Ürün videosu hazır (oynatıp kontrol edebilirsiniz)
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* COLOR VARIANTS SECTION (Birden Fazla 10+ Renk Seçeneği) */}
+                <div className="space-y-3 rounded-2xl border-2 border-dashed border-[#1974E5]/40 bg-blue-50/30 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-extrabold text-neutral-900">
+                        🎨 Ürün Renk Seçenekleri & Varyantlar ({pVariants.length} Renk Eklendi)
+                      </h4>
+                      <p className="text-[11px] text-neutral-600">
+                        Aynı modelin 10+ farklı deri rengini ekleyebilirsiniz. Müşteri ürün sayfasında tüm renkleri kutucuklar halinde görecektir.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const autoColors: ColorVariant[] = POPULAR_LEATHER_COLORS.map((c, i) => ({
+                            id: `var-auto-${Date.now()}-${i}`,
+                            name: c.name,
+                            colorHex: c.colorHex,
+                            image: pImage,
+                            stock: 25,
+                          }));
+                          setPVariants(autoColors);
+                          notify("✓ 10 popüler hakiki deri rengi eklendi!");
+                        }}
+                        className="rounded-xl bg-neutral-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-neutral-800 shadow-xs"
+                      >
+                        ⚡ 10 Popüler Rengi Doldur
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newV: ColorVariant = {
+                            id: `var-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                            name: "YENİ RENK",
+                            colorHex: "#181818",
+                            image: pImage,
+                            stock: 20,
+                          };
+                          setPVariants((prev) => [...prev, newV]);
+                        }}
+                        className="rounded-xl bg-[#1974E5] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#1461c4] shadow-xs"
+                      >
+                        ＋ Renk Ekle
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Quick Preset Color Chips */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-neutral-500 mr-1">Hızlı Ekle:</span>
+                    {POPULAR_LEATHER_COLORS.map((pc) => {
+                      const exists = pVariants.some((v) => v.name.toLocaleUpperCase("tr-TR") === pc.name);
+                      return (
+                        <button
+                          key={pc.name}
+                          type="button"
+                          disabled={exists}
+                          onClick={() => {
+                            const newV: ColorVariant = {
+                              id: `var-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                              name: pc.name,
+                              colorHex: pc.colorHex,
+                              image: pImage,
+                              stock: 25,
+                            };
+                            setPVariants((prev) => [...prev, newV]);
+                            notify(`✓ ${pc.name} eklendi`);
+                          }}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-bold transition ${
+                            exists
+                              ? "border-neutral-200 bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                              : "border-neutral-300 bg-white text-neutral-800 hover:border-neutral-900"
+                          }`}
+                        >
+                          <span
+                            className="h-2.5 w-2.5 rounded-full border border-black/20"
+                            style={{ backgroundColor: pc.colorHex }}
+                          />
+                          <span>{pc.name}</span>
+                          {!exists && <span className="text-neutral-400">+</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* List of Added Colors */}
+                  <div className="mt-2 divide-y divide-neutral-200 rounded-xl border border-neutral-200 bg-white overflow-hidden shadow-2xs">
+                    {pVariants.map((v, vIdx) => (
+                      <div
+                        key={v.id}
+                        className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white hover:bg-neutral-50/50 transition"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-neutral-100 text-[11px] font-bold text-neutral-700">
+                            {vIdx + 1}
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="color"
+                              value={v.colorHex}
+                              onChange={(e) => {
+                                const next = [...pVariants];
+                                next[vIdx].colorHex = e.target.value;
+                                setPVariants(next);
+                              }}
+                              className="h-8 w-8 cursor-pointer rounded-lg border border-neutral-300 p-0.5"
+                              title="Renk Tonunu Değiştir"
+                            />
+                          </div>
+
+                          <div>
+                            <input
+                              value={v.name}
+                              onChange={(e) => {
+                                const next = [...pVariants];
+                                next[vIdx].name = e.target.value.toLocaleUpperCase("tr-TR");
+                                setPVariants(next);
+                              }}
+                              placeholder="Renk Adı (Örn: FLOTER SİYAH)"
+                              className="h-8 w-36 sm:w-48 rounded-lg border border-neutral-300 px-2.5 text-xs font-bold uppercase text-neutral-900"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <img
+                              src={v.image || pImage}
+                              alt={v.name}
+                              className="h-8 w-8 rounded-lg border border-neutral-200 object-cover"
+                            />
+                            <label className="cursor-pointer rounded-lg border border-neutral-300 bg-neutral-50 px-2 py-1 text-[11px] font-semibold text-neutral-700 hover:bg-neutral-100">
+                              Fotoğraf
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) =>
+                                  handlePhotoFile(e.target.files, (url) => {
+                                    const next = [...pVariants];
+                                    next[vIdx].image = url;
+                                    setPVariants(next);
+                                  })
+                                }
+                              />
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-neutral-500">Stok:</span>
+                            <input
+                              type="number"
+                              value={v.stock}
+                              onChange={(e) => {
+                                const next = [...pVariants];
+                                next[vIdx].stock = Number(e.target.value) || 0;
+                                setPVariants(next);
+                              }}
+                              className="h-8 w-16 rounded-lg border border-neutral-300 px-2 text-xs font-bold"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (pVariants.length <= 1) {
+                                notify("⚠️ En az 1 renk varyantı kalmalıdır.");
+                                return;
+                              }
+                              setPVariants(pVariants.filter((_, idx) => idx !== vIdx));
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-xs font-bold text-rose-600 hover:bg-rose-100"
+                            title="Bu Rengi Kaldır"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -953,12 +2205,21 @@ export default function AdminPanelPage() {
                             {formatTRY(prod.compareAtPrice)}
                           </span>
                         </p>
-                        <Link
-                          href={`/urun/${prod.slug}`}
-                          className="mt-2 inline-block text-xs font-bold text-neutral-700 underline"
-                        >
-                          Ürün Sayfasında Gör ↗
-                        </Link>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                          <Link
+                            href={`/urun/${prod.slug}`}
+                            className="inline-block text-xs font-bold text-neutral-700 underline"
+                          >
+                            Ürün Sayfasında Gör ↗
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setEditingVariantProduct(prod)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-neutral-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-neutral-800 transition shadow-xs"
+                          >
+                            🎨 Renkleri & Fotoğrafları Yönet ({prod.variants?.length || 0})
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -1049,6 +2310,26 @@ export default function AdminPanelPage() {
                           placeholder="Ürün videosu MP4 adresi…"
                           className="mt-1 h-9 w-full rounded-xl border border-neutral-300 px-2.5 text-xs"
                         />
+                      </div>
+
+                      {/* Color Variants Quick Swatches Row */}
+                      <div className="col-span-2 sm:col-span-4 mt-1 flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-2.5">
+                        <span className="text-[11px] font-bold text-neutral-500">
+                          Aktif Renkler ({prod.variants?.length || 0}):
+                        </span>
+                        {(prod.variants || []).map((v) => (
+                          <span
+                            key={v.id}
+                            title={`${v.name} (Stok: ${v.stock})`}
+                            className="inline-flex items-center gap-1 rounded-md border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-[10px] font-bold text-neutral-700"
+                          >
+                            <span
+                              className="h-2 w-2 rounded-full border border-black/20"
+                              style={{ backgroundColor: v.colorHex }}
+                            />
+                            <span>{v.name}</span>
+                          </span>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -1650,11 +2931,14 @@ export default function AdminPanelPage() {
             <div className="rounded-2xl border-2 border-black p-5 text-black">
               <div className="flex items-center justify-between border-b-2 border-black pb-3">
                 <div>
-                  <p className="text-lg font-black uppercase">
-                    {labelOrder.cargoCompany}
+                  <p className="text-lg font-black uppercase text-red-600">
+                    {labelOrder.cargoCompany || "ARAS KARGO"}
                   </p>
                   <p className="text-xs font-bold">
-                    Gönderici: {store.settings.brandName} ({store.settings.address})
+                    Gönderici: {store.settings.companyTitle || "NAZ ÇANTA VE CÜZDAN"}
+                  </p>
+                  <p className="text-[11px] text-neutral-700">
+                    {store.settings.address} • Tel: {store.settings.phone}
                   </p>
                 </div>
                 <div className="text-right">
@@ -1669,7 +2953,10 @@ export default function AdminPanelPage() {
               <div className="my-4 border-b-2 border-black pb-4 text-center">
                 <div className="mx-auto flex h-14 max-w-xs items-center justify-center bg-[repeating-linear-gradient(90deg,#000,#000_3px,#fff_3px,#fff_6px)]" />
                 <p className="mt-1 font-mono text-base font-black tracking-widest">
-                  *{labelOrder.trackingNumber}*
+                  *{labelOrder.trackingNumber || "418290192841"}*
+                </p>
+                <p className="text-[10px] uppercase font-bold text-neutral-600">
+                  ARAS KARGO TAKİP & BARKOD
                 </p>
               </div>
 
@@ -1694,16 +2981,13 @@ export default function AdminPanelPage() {
                       • {it.name} ({it.variantName}) × {it.quantity}
                     </p>
                     {it.personalization && (
-                      <p className="font-mono text-xs font-black text-black">
-                        [BASKI: {it.personalization.typeLabel} | İSİM: &ldquo;
-                        {it.personalization.customText}&rdquo; | FONT:{" "}
-                        {it.personalization.fontFamily}]
+                      <p className="font-mono text-xs font-black text-rose-700 bg-rose-50 p-1 rounded mt-0.5">
+                        ⚠️ SICAK BASKI: &ldquo;{it.personalization.customText}&rdquo; ({it.personalization.typeLabel})
                       </p>
                     )}
                     {it.upsells.length > 0 && (
-                      <p className="font-bold">
-                        [EK PAKET:{" "}
-                        {it.upsells.map((u) => u.name).join(", ")}]
+                      <p className="font-bold text-amber-800">
+                        [🎁 EK PAKET: {it.upsells.map((u) => u.name).join(", ")}]
                       </p>
                     )}
                   </div>
@@ -1719,7 +3003,7 @@ export default function AdminPanelPage() {
       {/* ===================================================== */}
       {invoiceOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="no-print mb-4 flex items-center justify-between">
               <h3 className="text-base font-extrabold text-neutral-900">
                 🧾 E-Arşiv Fatura Önizleme ({invoiceOrder.invoiceNumber})
@@ -1728,7 +3012,7 @@ export default function AdminPanelPage() {
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="rounded-xl bg-[#1974E5] px-4 py-2 text-xs font-bold text-white"
+                  className="rounded-xl bg-[#1974E5] px-4 py-2 text-xs font-bold text-white shadow hover:bg-[#1461c4]"
                 >
                   🖨️ Faturayı Yazdır / PDF
                 </button>
@@ -1742,31 +3026,31 @@ export default function AdminPanelPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-neutral-300 p-6 text-xs text-neutral-800">
+            <div className="rounded-2xl border border-neutral-300 p-6 text-xs text-neutral-800 bg-white">
               <div className="flex justify-between border-b border-neutral-200 pb-4">
                 <div>
-                  <p className="text-base font-black">
-                    {store.settings.brandName} DERİ ÜRÜNLERİ A.Ş.
+                  <p className="text-base font-black text-neutral-900">
+                    {store.settings.companyTitle || "NAZ ÇANTA VE CÜZDAN"}
                   </p>
-                  <p>{store.settings.address}</p>
-                  <p>Tel: {store.settings.phone}</p>
+                  <p className="text-neutral-600">{store.settings.address}</p>
+                  <p className="text-neutral-600">Tel: {store.settings.phone}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold">E-ARŞİV FATURA</p>
-                  <p className="font-mono font-bold">
+                  <p className="font-bold text-neutral-900">E-ARŞİV FATURA</p>
+                  <p className="font-mono font-bold text-neutral-800">
                     No: {invoiceOrder.invoiceNumber}
                   </p>
-                  <p>Tarih: {invoiceOrder.createdAt}</p>
+                  <p className="text-neutral-500">Tarih: {invoiceOrder.createdAt}</p>
                 </div>
               </div>
 
               <div className="my-4">
-                <p className="font-bold">SAYIN: {invoiceOrder.customerName}</p>
-                <p>
+                <p className="font-bold text-neutral-900">SAYIN: {invoiceOrder.customerName}</p>
+                <p className="text-neutral-700">
                   {invoiceOrder.address} — {invoiceOrder.district}/
                   {invoiceOrder.city}
                 </p>
-                <p>
+                <p className="text-neutral-600">
                   Tel: {invoiceOrder.customerPhone} • E-Posta:{" "}
                   {invoiceOrder.customerEmail}
                 </p>
@@ -1774,7 +3058,7 @@ export default function AdminPanelPage() {
 
               <table className="w-full border-collapse border-t border-b border-neutral-300 text-left">
                 <thead>
-                  <tr className="border-b border-neutral-200 bg-neutral-50">
+                  <tr className="border-b border-neutral-200 bg-neutral-50 text-neutral-800">
                     <th className="py-2">Açıklama</th>
                     <th className="py-2 text-right">Adet</th>
                     <th className="py-2 text-right">Tutar</th>
@@ -1784,11 +3068,11 @@ export default function AdminPanelPage() {
                   {invoiceOrder.items.map((item) => (
                     <React.Fragment key={item.cartItemId}>
                       <tr>
-                        <td className="py-2 font-bold">
+                        <td className="py-2 font-bold text-neutral-900">
                           {item.name} ({item.variantName})
                         </td>
                         <td className="py-2 text-right">{item.quantity}</td>
-                        <td className="py-2 text-right font-bold">
+                        <td className="py-2 text-right font-bold text-neutral-900">
                           {formatTRY(item.basePrice * item.quantity)}
                         </td>
                       </tr>
@@ -1827,24 +3111,586 @@ export default function AdminPanelPage() {
 
               <div className="mt-4 flex justify-end">
                 <div className="w-56 space-y-1">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-neutral-600">
                     <span>Ürün Ara Toplam:</span>
                     <span>{formatTRY(invoiceOrder.subtotal)}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-neutral-600">
                     <span>Sıcak Baskı Hizmeti:</span>
                     <span>{formatTRY(invoiceOrder.personalizationTotal)}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between text-neutral-600">
                     <span>Hediye Paketi & Ek Ürün:</span>
                     <span>{formatTRY(invoiceOrder.upsellTotal)}</span>
                   </div>
-                  <div className="flex justify-between border-t border-neutral-300 pt-2 text-sm font-black">
+                  <div className="flex justify-between border-t border-neutral-300 pt-2 text-sm font-black text-neutral-900">
                     <span>GENEL TOPLAM (KDV Dahil):</span>
                     <span>{formatTRY(invoiceOrder.total)}</span>
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* BATCH CARGO LABELS MODAL (Toplu Barkod & Kargo Etiketi) */}
+      {/* ===================================================== */}
+      {batchLabelOrders && batchLabelOrders.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+          <div className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div className="no-print mb-4 flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900">
+                  🏷️ Toplu Aras Kargo Barkod & Etiket Listesi ({batchLabelOrders.length} Sipariş)
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Tüm etiketler Aras Kargo barkodu ve gönderici olarak NAZ ÇANTA VE CÜZDAN ile hazırlandı.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="rounded-xl bg-[#1974E5] px-5 py-2.5 text-xs font-bold text-white shadow hover:bg-[#1461c4]"
+                >
+                  🖨️ Tüm Barkodları Yazdır / PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchLabelOrders(null)}
+                  className="rounded-xl bg-neutral-100 px-3 py-2 text-xs font-bold"
+                >
+                  ✕ Kapat
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {batchLabelOrders.map((ord, i) => (
+                <div
+                  key={ord.id}
+                  className="rounded-2xl border-2 border-black p-5 text-black bg-white print-page-break"
+                >
+                  <div className="flex items-center justify-between border-b-2 border-black pb-3">
+                    <div>
+                      <p className="text-xl font-black uppercase text-red-600 tracking-wider">
+                        {ord.cargoCompany || "ARAS KARGO"}
+                      </p>
+                      <p className="text-xs font-bold">
+                        Gönderici: {store.settings.companyTitle || "NAZ ÇANTA VE CÜZDAN"}
+                      </p>
+                      <p className="text-[11px] text-neutral-700">
+                        {store.settings.address} • Tel: {store.settings.phone}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-base font-black">
+                        #{ord.orderNumber}
+                      </p>
+                      <p className="text-xs">{ord.createdAt}</p>
+                      <span className="inline-block mt-1 bg-black text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                        Etiket {i + 1} / {batchLabelOrders.length}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Barcode representation */}
+                  <div className="my-4 border-b-2 border-black pb-4 text-center">
+                    <div className="mx-auto flex h-14 max-w-sm items-center justify-center bg-[repeating-linear-gradient(90deg,#000,#000_3px,#fff_3px,#fff_6px)]" />
+                    <p className="mt-1 font-mono text-lg font-black tracking-widest">
+                      *{ord.trackingNumber || "418290192841"}*
+                    </p>
+                    <p className="text-[10px] uppercase font-bold text-neutral-600">
+                      ARAS KARGO BARKODU & TAKİP NUMARASI
+                    </p>
+                  </div>
+
+                  <div className="border-b-2 border-black pb-3 text-xs">
+                    <p className="font-black uppercase">ALICI MÜŞTERİ BİLGİLERİ:</p>
+                    <p className="mt-1 text-sm font-bold">
+                      {ord.customerName} — {ord.customerPhone}
+                    </p>
+                    <p className="mt-0.5 text-xs">{ord.address}</p>
+                    <p className="font-black text-sm">
+                      {ord.district} / {ord.city}
+                    </p>
+                  </div>
+
+                  <div className="pt-3 text-xs">
+                    <p className="font-black uppercase">
+                      PAKET & ATÖLYE BASKI İÇERİĞİ:
+                    </p>
+                    {ord.items.map((it) => (
+                      <div key={it.cartItemId} className="mt-1.5">
+                        <p className="font-bold">
+                          • {it.name} ({it.variantName}) × {it.quantity}
+                        </p>
+                        {it.personalization && (
+                          <p className="font-mono text-xs font-black text-rose-700 bg-rose-50 p-1.5 rounded mt-0.5">
+                            ⚠️ DİKKAT ATÖLYE SICAK BASKI: &ldquo;{it.personalization.customText}&rdquo; ({it.personalization.typeLabel})
+                          </p>
+                        )}
+                        {it.upsells.length > 0 && (
+                          <p className="font-bold text-amber-800">
+                            [🎁 EK HEDİYE PAKETİ: {it.upsells.map((u) => u.name).join(", ")}]
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* BATCH INVOICES MODAL (Toplu E-Arşiv Fatura Yazdırma)  */}
+      {/* ===================================================== */}
+      {batchInvoiceOrders && batchInvoiceOrders.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+          <div className="w-full max-w-3xl rounded-3xl bg-white p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div className="no-print mb-4 flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-neutral-900">
+                  🧾 Toplu E-Arşiv Fatura Listesi ({batchInvoiceOrders.length} Fatura)
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Resmi fatura kesici firma: NAZ ÇANTA VE CÜZDAN (Sultanbeyli / İstanbul)
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="rounded-xl bg-[#1974E5] px-5 py-2.5 text-xs font-bold text-white shadow hover:bg-[#1461c4]"
+                >
+                  🖨️ Tüm Faturaları Yazdır / PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBatchInvoiceOrders(null)}
+                  className="rounded-xl bg-neutral-100 px-3 py-2 text-xs font-bold"
+                >
+                  ✕ Kapat
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-8">
+              {batchInvoiceOrders.map((invOrd, i) => (
+                <div
+                  key={invOrd.id}
+                  className="rounded-2xl border border-neutral-300 p-6 text-xs text-neutral-800 bg-white print-page-break"
+                >
+                  <div className="flex justify-between border-b border-neutral-200 pb-4">
+                    <div>
+                      <p className="text-base font-black text-neutral-900">
+                        {store.settings.companyTitle || "NAZ ÇANTA VE CÜZDAN"}
+                      </p>
+                      <p className="text-neutral-600">{store.settings.address}</p>
+                      <p className="text-neutral-600">Tel: {store.settings.phone}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-neutral-900">E-ARŞİV FATURA</p>
+                      <p className="font-mono font-bold text-neutral-800">
+                        No: {invOrd.invoiceNumber}
+                      </p>
+                      <p className="text-neutral-500">Tarih: {invOrd.createdAt}</p>
+                    </div>
+                  </div>
+
+                  <div className="my-4">
+                    <p className="font-bold text-neutral-900">SAYIN: {invOrd.customerName}</p>
+                    <p className="text-neutral-700">
+                      {invOrd.address} — {invOrd.district}/{invOrd.city}
+                    </p>
+                    <p className="text-neutral-600">
+                      Tel: {invOrd.customerPhone} • E-Posta: {invOrd.customerEmail}
+                    </p>
+                  </div>
+
+                  <table className="w-full border-collapse border-t border-b border-neutral-300 text-left">
+                    <thead>
+                      <tr className="border-b border-neutral-200 bg-neutral-50 text-neutral-800">
+                        <th className="py-2">Açıklama</th>
+                        <th className="py-2 text-right">Adet</th>
+                        <th className="py-2 text-right">Tutar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {invOrd.items.map((item) => (
+                        <React.Fragment key={item.cartItemId}>
+                          <tr>
+                            <td className="py-2 font-bold text-neutral-900">
+                              {item.name} ({item.variantName})
+                            </td>
+                            <td className="py-2 text-right">{item.quantity}</td>
+                            <td className="py-2 text-right font-bold text-neutral-900">
+                              {formatTRY(item.basePrice * item.quantity)}
+                            </td>
+                          </tr>
+                          {item.personalization && item.personalization.price > 0 && (
+                            <tr>
+                              <td className="py-1.5 pl-4 text-neutral-600">
+                                + {item.personalization.typeLabel} ({item.personalization.customText})
+                              </td>
+                              <td className="py-1.5 text-right">{item.quantity}</td>
+                              <td className="py-1.5 text-right">
+                                {formatTRY(item.personalization.price * item.quantity)}
+                              </td>
+                            </tr>
+                          )}
+                          {item.upsells.map((u) => (
+                            <tr key={u.id}>
+                              <td className="py-1.5 pl-4 text-neutral-600">+ {u.name}</td>
+                              <td className="py-1.5 text-right">{item.quantity}</td>
+                              <td className="py-1.5 text-right">
+                                {formatTRY(u.price * item.quantity)}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="mt-4 flex justify-end">
+                    <div className="w-56 space-y-1">
+                      <div className="flex justify-between text-neutral-600">
+                        <span>Ürün Ara Toplam:</span>
+                        <span>{formatTRY(invOrd.subtotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-neutral-600">
+                        <span>Sıcak Baskı Hizmeti:</span>
+                        <span>{formatTRY(invOrd.personalizationTotal)}</span>
+                      </div>
+                      <div className="flex justify-between text-neutral-600">
+                        <span>Hediye Paketi & Ek Ürün:</span>
+                        <span>{formatTRY(invOrd.upsellTotal)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-neutral-300 pt-2 text-sm font-black text-neutral-900">
+                        <span>GENEL TOPLAM (KDV Dahil):</span>
+                        <span>{formatTRY(invOrd.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================== */}
+      {/* EDIT PRODUCT VARIANTS MODAL (10+ Renk Varyantı Yönetimi) */}
+      {/* ===================================================== */}
+      {editingVariantProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-4xl rounded-3xl bg-white p-6 shadow-2xl max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#1974E5]">
+                  Varyant & Fotoğraf Yönetimi
+                </span>
+                <h3 className="text-lg font-black text-neutral-900">
+                  {editingVariantProduct.name}
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Aynı modelin 10+ rengini ekleyin. Her rengin fotoğrafı, tonu ve stok adedi ürün sayfasında Getto Deri gibi yan yana kutucuklar olarak sergilenir.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingVariantProduct(null)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+              {/* Quick presets & Add Button */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-blue-50/60 border border-blue-200/60 p-3">
+                <div className="text-xs font-bold text-neutral-800">
+                  Mevcut Renk Sayısı:{" "}
+                  <span className="font-extrabold text-[#1974E5]">
+                    {editingVariantProduct.variants?.length || 0} Renk
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentVars = editingVariantProduct.variants || [];
+                      const existingNames = new Set(
+                        currentVars.map((v) => v.name.toLocaleUpperCase("tr-TR"))
+                      );
+                      const additions: ColorVariant[] = POPULAR_LEATHER_COLORS.filter(
+                        (c) => !existingNames.has(c.name)
+                      ).map((c, i) => ({
+                        id: `var-edit-${Date.now()}-${i}`,
+                        name: c.name,
+                        colorHex: c.colorHex,
+                        image: editingVariantProduct.image,
+                        stock: 25,
+                      }));
+
+                      if (additions.length === 0) {
+                        notify("Tüm 10 popüler renk zaten bu üründe mevcut!");
+                        return;
+                      }
+
+                      setEditingVariantProduct({
+                        ...editingVariantProduct,
+                        variants: [...currentVars, ...additions],
+                      });
+                      notify(`✓ ${additions.length} yeni renk varyantı listeye eklendi!`);
+                    }}
+                    className="rounded-xl bg-neutral-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-neutral-800 shadow-xs"
+                  >
+                    ⚡ 10 Popüler Deri Rengini Ekle
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newV: ColorVariant = {
+                        id: `var-custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                        name: "YENİ RENK",
+                        colorHex: "#181818",
+                        image: editingVariantProduct.image,
+                        stock: 20,
+                      };
+                      setEditingVariantProduct({
+                        ...editingVariantProduct,
+                        variants: [...(editingVariantProduct.variants || []), newV],
+                      });
+                    }}
+                    className="rounded-xl bg-[#1974E5] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#1461c4] shadow-xs"
+                  >
+                    ＋ Yeni Renk Ekle
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Add Preset Badges */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-bold text-neutral-500 mr-1">
+                  Hızlı Ekle:
+                </span>
+                {POPULAR_LEATHER_COLORS.map((pc) => {
+                  const exists = (editingVariantProduct.variants || []).some(
+                    (v) => v.name.toLocaleUpperCase("tr-TR") === pc.name
+                  );
+                  return (
+                    <button
+                      key={pc.name}
+                      type="button"
+                      disabled={exists}
+                      onClick={() => {
+                        const newV: ColorVariant = {
+                          id: `var-quick-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                          name: pc.name,
+                          colorHex: pc.colorHex,
+                          image: editingVariantProduct.image,
+                          stock: 25,
+                        };
+                        setEditingVariantProduct({
+                          ...editingVariantProduct,
+                          variants: [...(editingVariantProduct.variants || []), newV],
+                        });
+                        notify(`✓ ${pc.name} eklendi`);
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-bold transition ${
+                        exists
+                          ? "border-neutral-200 bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                          : "border-neutral-300 bg-white text-neutral-800 hover:border-neutral-900 shadow-2xs"
+                      }`}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-full border border-black/20"
+                        style={{ backgroundColor: pc.colorHex }}
+                      />
+                      <span>{pc.name}</span>
+                      {!exists && <span className="text-neutral-400">+</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Variants List */}
+              <div className="divide-y divide-neutral-200 rounded-2xl border border-neutral-200 bg-white overflow-hidden shadow-2xs">
+                {(editingVariantProduct.variants || []).map((v, vIdx) => (
+                  <div
+                    key={v.id}
+                    className="flex flex-wrap items-center justify-between gap-3 p-3.5 hover:bg-neutral-50/60 transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-neutral-100 text-[11px] font-bold text-neutral-700">
+                        {vIdx + 1}
+                      </span>
+
+                      {/* Color Hex Picker */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="color"
+                          value={v.colorHex}
+                          onChange={(e) => {
+                            const nextVars = [...(editingVariantProduct.variants || [])];
+                            nextVars[vIdx] = { ...nextVars[vIdx], colorHex: e.target.value };
+                            setEditingVariantProduct({
+                              ...editingVariantProduct,
+                              variants: nextVars,
+                            });
+                          }}
+                          className="h-9 w-9 cursor-pointer rounded-lg border border-neutral-300 p-0.5"
+                          title="Renk Tonunu Değiştir"
+                        />
+                      </div>
+
+                      {/* Variant Name Input */}
+                      <div>
+                        <input
+                          value={v.name}
+                          onChange={(e) => {
+                            const nextVars = [...(editingVariantProduct.variants || [])];
+                            nextVars[vIdx] = {
+                              ...nextVars[vIdx],
+                              name: e.target.value.toLocaleUpperCase("tr-TR"),
+                            };
+                            setEditingVariantProduct({
+                              ...editingVariantProduct,
+                              variants: nextVars,
+                            });
+                          }}
+                          placeholder="Renk Adı (Örn: FLOTER SİYAH)"
+                          className="h-9 w-40 sm:w-56 rounded-lg border border-neutral-300 px-3 text-xs font-bold uppercase text-neutral-900"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Variant Photo Preview & Upload */}
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={v.image || editingVariantProduct.image}
+                          alt={v.name}
+                          className="h-9 w-9 rounded-lg border border-neutral-200 object-cover shadow-2xs"
+                        />
+                        <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-neutral-800 hover:bg-neutral-50 shadow-2xs">
+                          📷 Fotoğraf Seç
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) =>
+                              handlePhotoFile(e.target.files, (url) => {
+                                const nextVars = [...(editingVariantProduct.variants || [])];
+                                nextVars[vIdx] = { ...nextVars[vIdx], image: url };
+                                setEditingVariantProduct({
+                                  ...editingVariantProduct,
+                                  variants: nextVars,
+                                });
+                                notify(`✓ ${v.name} için fotoğraf güncellendi`);
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+
+                      {/* Stock Input */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-neutral-500">
+                          Stok:
+                        </span>
+                        <input
+                          type="number"
+                          value={v.stock}
+                          onChange={(e) => {
+                            const nextVars = [...(editingVariantProduct.variants || [])];
+                            nextVars[vIdx] = {
+                              ...nextVars[vIdx],
+                              stock: Number(e.target.value) || 0,
+                            };
+                            setEditingVariantProduct({
+                              ...editingVariantProduct,
+                              variants: nextVars,
+                            });
+                          }}
+                          className="h-9 w-20 rounded-lg border border-neutral-300 px-2.5 text-xs font-bold"
+                        />
+                      </div>
+
+                      {/* Remove Variant Button */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentVars = editingVariantProduct.variants || [];
+                          if (currentVars.length <= 1) {
+                            notify("⚠️ En az 1 renk varyantı kalmalıdır.");
+                            return;
+                          }
+                          const nextVars = currentVars.filter((_, idx) => idx !== vIdx);
+                          setEditingVariantProduct({
+                            ...editingVariantProduct,
+                            variants: nextVars,
+                          });
+                        }}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-xs font-bold text-rose-600 hover:bg-rose-100"
+                        title="Bu Rengi Kaldır"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between border-t pt-4">
+              <button
+                type="button"
+                onClick={() => setEditingVariantProduct(null)}
+                className="rounded-xl border border-neutral-300 px-4 py-2.5 text-xs font-bold text-neutral-700 hover:bg-neutral-100"
+              >
+                Vazgeç
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const next = structuredClone(store);
+                  const pIdx = next.products.findIndex(
+                    (p) => p.id === editingVariantProduct.id
+                  );
+                  if (pIdx !== -1) {
+                    const updatedVariants = editingVariantProduct.variants || [];
+                    next.products[pIdx].variants = updatedVariants;
+                    // Sync gallery
+                    const allImages = [
+                      next.products[pIdx].image,
+                      ...updatedVariants.map((v) => v.image).filter(Boolean),
+                    ];
+                    next.products[pIdx].gallery = Array.from(new Set(allImages));
+                    updateStore(next);
+                    setEditingVariantProduct(null);
+                    notify(
+                      `✓ ${editingVariantProduct.name} renk seçenekleri başarıyla kaydedildi!`
+                    );
+                  }
+                }}
+                className="rounded-xl bg-[#1974E5] px-6 py-2.5 text-xs font-extrabold text-white shadow hover:bg-[#1461c4]"
+              >
+                💾 Değişiklikleri Kaydet & Yayınla
+              </button>
             </div>
           </div>
         </div>

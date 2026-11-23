@@ -1,17 +1,19 @@
 import React from "react";
 import type { ProductSpec } from "@/types/store";
 
-export function TridentLogo({ className = "h-8 w-8" }: { className?: string }) {
+export function TridentLogo({
+  className = "h-10 w-auto",
+  invert = false,
+}: {
+  className?: string;
+  invert?: boolean;
+}) {
   return (
-    <svg
-      viewBox="0 0 64 64"
-      fill="currentColor"
-      className={className}
-      aria-label="Getto Deri Logo"
-    >
-      {/* Trident emblem matching Getto Deri header crown/trident */}
-      <path d="M32 6 L37 18 L34 18 L34 38 L46 38 L46 22 L43 22 L49 10 L53 22 L50 22 L50 42 C50 44.2 48.2 46 46 46 L34 46 L34 52 L39 56 L32 60 L25 56 L30 52 L30 46 L18 46 C15.8 46 14 44.2 14 42 L14 22 L11 22 L15 10 L21 22 L18 22 L18 38 L30 38 L30 18 L27 18 Z" />
-    </svg>
+    <img
+      src="/logo/beeblack-ari.png"
+      alt="BeeBlack"
+      className={`${className} object-contain ${invert ? "brightness-0 invert" : ""}`}
+    />
   );
 }
 

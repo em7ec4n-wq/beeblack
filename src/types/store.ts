@@ -164,8 +164,35 @@ export interface CustomerQuestion {
   isPublic: boolean;
 }
 
+export type HomeBlockType =
+  | "hero"
+  | "categories"
+  | "featured"
+  | "video"
+  | "reviews"
+  | "lookbook"
+  | "faq"
+  | "custom_banner";
+
+export interface CustomBannerData {
+  image: string;
+  heading: string;
+  ctaText: string;
+  linkUrl: string;
+}
+
+export interface HomeBlock {
+  id: string;
+  type?: HomeBlockType;
+  title: string;
+  enabled: boolean;
+  bannerData?: CustomBannerData;
+}
+
 export interface StoreSettings {
   brandName: string;
+  companyTitle?: string;
+  cargoCompany?: string;
   slogan: string;
   announcements: string[];
   freeShippingThreshold: number;
@@ -180,7 +207,11 @@ export interface StoreSettings {
   heroSubtitle: string;
   heroCta: string;
   heroImage: string;
+  featuredTitle: string;
+  lookbookTitle: string;
+  lookbookImage: string;
   promoVideoUrl: string;
+  homeBlocks: HomeBlock[];
   paymentMethods: {
     creditCardActive: boolean;
     posProvider: string;

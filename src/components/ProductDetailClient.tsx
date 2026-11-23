@@ -35,13 +35,9 @@ export function ProductDetailClient({ slug }: { slug: string }) {
   const [activeMediaIdx, setActiveMediaIdx] = useState(0);
   const [showVideo, setShowVideo] = useState(false);
 
-  // Personalization state (BASKI TÜRÜNÜZÜ SEÇİNİZ)
-  const [stampType, setStampType] = useState<"none" | "laser" | "hot_stamp">(
-    "none"
-  );
+  // Personalization state (ONLY Sıcak Baskı — Kör Baskı / Düz)
+  const [stampType, setStampType] = useState<"none" | "hot_stamp">("none");
   const [customText, setCustomText] = useState("");
-  const [selectedFont, setSelectedFont] = useState(FONTS[0].label);
-  const [selectedFoil, setSelectedFoil] = useState(FOIL_COLORS[0].label);
   const [selectedSymbolId, setSelectedSymbolId] = useState<string>("");
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showSymbolsModal, setShowSymbolsModal] = useState(false);
@@ -153,23 +149,17 @@ export function ProductDetailClient({ slug }: { slug: string }) {
       basePrice: product.price,
       quantity,
       personalization:
-        stampType === "none" && !selectedSymbol
+        stampType === "none"
           ? undefined
           : {
-              type: stampType === "none" ? "laser" : stampType,
-              typeLabel:
-                stampType === "hot_stamp"
-                  ? `Sıcak Baskı (+₺${(
-                      product.hotStampPrice ||
-                      store.settings.defaultHotStampPrice
-                    ).toFixed(2)})`
-                  : "Lazer Baskı (Ücretsiz)",
+              type: "hot_stamp" as const,
+              typeLabel: `Sıcak Baskı (Düz / Kör Baskı +₺${(
+                product.hotStampPrice || store.settings.defaultHotStampPrice
+              ).toFixed(2)})`,
               price: hotStampFee,
               customText: customText.trim(),
-              fontFamily: selectedFont,
-              foilColor: stampType === "hot_stamp" ? selectedFoil : undefined,
-              symbolName: selectedSymbol?.name,
-              symbolPrice: selectedSymbol?.price,
+              fontFamily: "Standart Düz Baskı",
+              foilColor: "Kör Baskı",
             },
       upsells: chosenUpsells,
     };
@@ -286,32 +276,16 @@ export function ProductDetailClient({ slug }: { slug: string }) {
               )}
 
               {/* Live Personalization Preview Overlay on Product Image */}
-              {(customText.trim() || selectedSymbol) && (
-                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-2xl border border-amber-400/50 bg-black/80 px-4 py-3 text-white backdrop-blur-md">
+              {stampType === "hot_stamp" && customText.trim() && (
+                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between rounded-2xl border border-white/25 bg-black/80 px-4 py-3 text-white backdrop-blur-md">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
-                      CANLI BASKI ÖNİZLEMESİ (
-                      {stampType === "hot_stamp" ? "SICAK BASKI" : "LAZER BASKI"}
-                      )
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-300">
+                      CANLI SICAK BASKI ÖNİZLEMESİ (DÜZ / KÖR BASKI)
                     </span>
-                    <p
-                      className={`mt-0.5 text-lg font-bold tracking-wider ${
-                        stampType === "hot_stamp" &&
-                        selectedFoil.includes("Gold")
-                          ? "text-amber-300"
-                          : stampType === "hot_stamp" &&
-                              selectedFoil.includes("Gümüş")
-                            ? "text-slate-200"
-                            : "text-stone-200"
-                      }`}
-                    >
-                      {selectedSymbol ? `${selectedSymbol.iconText} ` : ""}
-                      {customText.trim() || selectedSymbol?.name}
+                    <p className="mt-0.5 text-lg font-bold tracking-widest text-stone-200 uppercase">
+                      {customText.trim()}
                     </p>
                   </div>
-                  <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold">
-                    {selectedFont.split(" ")[0]}
-                  </span>
                 </div>
               )}
 
@@ -401,17 +375,17 @@ export function ProductDetailClient({ slug }: { slug: string }) {
             </div>
           </div>
 
-          {/* 2. COLOR VARIANTS WITH COMPACT THUMBNAIL BOXES */}
+          {/* 2. COLOR VARIANTS (EXACT GETTO DERI HORIZONTAL RECTANGULAR SWATCHES) */}
           {product.variants.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-neutral-600">
+              <p className="text-xs font-medium text-neutral-700">
                 Renk:{" "}
                 <strong className="font-bold uppercase text-neutral-900">
                   {activeVariant.name}
                 </strong>
               </p>
 
-              <div className="mt-2 grid grid-cols-6 gap-1.5 sm:grid-cols-9 lg:grid-cols-6">
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 {product.variants.map((variant, idx) => {
                   const selected = idx === selectedVariantIdx;
                   return (
@@ -423,18 +397,21 @@ export function ProductDetailClient({ slug }: { slug: string }) {
                         setActiveMediaIdx(0);
                         setShowVideo(false);
                       }}
-                      title={variant.name}
-                      className={`group relative aspect-square overflow-hidden rounded-xl border-2 bg-white p-0.5 transition ${
+                      title={`${variant.name} (${variant.stock > 0 ? "Stokta" : "Tükendi"})`}
+                      className={`group relative h-6 w-9 sm:h-7 sm:w-11 rounded-md border-2 transition-all cursor-pointer shadow-2xs ${
                         selected
-                          ? "border-neutral-900 ring-1 ring-neutral-900/20"
-                          : "border-neutral-200 hover:border-neutral-400"
+                          ? "border-neutral-900 ring-2 ring-neutral-900/30 scale-105"
+                          : "border-neutral-300 hover:border-neutral-700 opacity-90 hover:opacity-100"
                       }`}
+                      style={{ backgroundColor: variant.colorHex || "#181818" }}
                     >
-                      <img
-                        src={variant.image}
-                        alt={variant.name}
-                        className="h-full w-full rounded-lg object-cover"
-                      />
+                      {variant.image && (
+                        <img
+                          src={variant.image}
+                          alt={variant.name}
+                          className="h-full w-full object-cover rounded-xs opacity-75 mix-blend-multiply"
+                        />
+                      )}
                     </button>
                   );
                 })}
@@ -447,7 +424,7 @@ export function ProductDetailClient({ slug }: { slug: string }) {
             <div className="space-y-2.5">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-extrabold uppercase tracking-wider text-[#B91C1C]">
-                  BASKI TÜRÜNÜZÜ SEÇİNİZ <span className="text-[#D60000]">*</span>
+                  KİŞİYE ÖZEL İSİM BASKISI
                 </h2>
                 <button
                   type="button"
@@ -459,53 +436,21 @@ export function ProductDetailClient({ slug }: { slug: string }) {
                 </button>
               </div>
 
-              {/* Lazer Baskı vs Sıcak Baskı Modern Cards */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setStampType((prev) =>
-                      prev === "laser" ? "none" : "laser"
-                    )
-                  }
-                  className={`flex items-center gap-2.5 rounded-2xl border-2 bg-white px-3.5 py-2.5 text-left transition-all ${
-                    stampType === "laser"
-                      ? "border-[#1974E5] bg-blue-50/40 shadow-xs"
-                      : "border-neutral-200 hover:border-neutral-300"
-                  }`}
-                >
-                  <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
-                      stampType === "laser"
-                        ? "bg-[#1974E5] text-white"
-                        : "border border-neutral-300 text-neutral-600"
-                    }`}
-                  >
-                    {stampType === "laser" ? "✓" : "+"}
-                  </span>
-                  <div className="leading-tight">
-                    <span className="block text-xs font-bold text-neutral-900 sm:text-sm">
-                      Lazer Baskı
-                    </span>
-                    <span className="block text-[11px] font-bold text-emerald-600">
-                      Ücretsiz
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setStampType((prev) =>
-                      prev === "hot_stamp" ? "none" : "hot_stamp"
-                    )
-                  }
-                  className={`flex items-center gap-2.5 rounded-2xl border-2 bg-white px-3.5 py-2.5 text-left transition-all ${
-                    stampType === "hot_stamp"
-                      ? "border-[#1974E5] bg-blue-50/40 shadow-xs"
-                      : "border-neutral-200 hover:border-neutral-300"
-                  }`}
-                >
+              {/* Single Clean Sıcak Baskı (Düz / Kör Baskı) Toggle Card */}
+              <button
+                type="button"
+                onClick={() =>
+                  setStampType((prev) =>
+                    prev === "hot_stamp" ? "none" : "hot_stamp"
+                  )
+                }
+                className={`flex w-full items-center justify-between rounded-2xl border-2 bg-white px-4 py-3 text-left transition-all ${
+                  stampType === "hot_stamp"
+                    ? "border-[#1974E5] bg-blue-50/40 shadow-xs"
+                    : "border-neutral-200 hover:border-neutral-300"
+                }`}
+              >
+                <div className="flex items-center gap-3">
                   <span
                     className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
                       stampType === "hot_stamp"
@@ -513,149 +458,57 @@ export function ProductDetailClient({ slug }: { slug: string }) {
                         : "border border-neutral-300 text-neutral-600"
                     }`}
                   >
-                    {stampType === "hot_stamp" ? "✓" : "✒"}
+                    {stampType === "hot_stamp" ? "✓" : "+"}
                   </span>
                   <div className="leading-tight">
-                    <span className="block text-xs font-bold text-neutral-900 sm:text-sm">
-                      Sıcak Baskı
+                    <span className="block text-sm font-bold text-neutral-900">
+                      Sıcak Baskı (Düz / Kör Baskı)
                     </span>
-                    <span className="block text-[11px] font-bold text-emerald-600">
-                      +₺
-                      {(
-                        product.hotStampPrice ||
-                        store.settings.defaultHotStampPrice
-                      ).toFixed(2)}
+                    <span className="block text-[11px] font-medium text-neutral-500">
+                      İsminizi ısı ve pres ile deriye kalıcı olarak işliyoruz
                     </span>
                   </div>
-                </button>
-              </div>
+                </div>
+                <span className="shrink-0 rounded-full bg-emerald-50 px-3 py-1 text-xs font-extrabold text-emerald-700">
+                  +₺
+                  {(
+                    product.hotStampPrice ||
+                    store.settings.defaultHotStampPrice
+                  ).toFixed(2)}
+                </span>
+              </button>
 
-              {/* Compact Modern Personalization Box (Zero native selects!) */}
-              {stampType !== "none" && (
-                <div className="space-y-3 rounded-2xl border border-[#1974E5]/30 bg-white p-3.5 shadow-xs">
+              {/* Clean Single Name Input when Sıcak Baskı is selected */}
+              {stampType === "hot_stamp" && (
+                <div className="space-y-2.5 rounded-2xl border border-[#1974E5]/30 bg-white p-3.5 shadow-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#1974E5]">
-                      {stampType === "hot_stamp"
-                        ? "Sıcak Baskı Detayı"
-                        : "Lazer Baskı Detayı"}
+                      Sıcak Baskı İsim Girişi (Düz / Kör Baskı)
                     </span>
                     <button
                       type="button"
                       onClick={() => {
                         setStampType("none");
                         setCustomText("");
-                        setSelectedSymbolId("");
                       }}
                       className="text-[11px] font-semibold text-neutral-400 hover:text-rose-600"
                     >
-                      İptal Et ✕
+                      Kaldır ✕
                     </button>
                   </div>
 
-                  {/* Custom Name Input */}
                   <input
                     type="text"
                     maxLength={18}
                     value={customText}
                     onChange={(e) => setCustomText(e.target.value)}
                     placeholder="Yazılacak İsim / Baş Harfler (Örn: A. YILMAZ)"
-                    className="h-10 w-full rounded-xl border border-neutral-200 bg-[#F6F6F6] px-3.5 text-sm font-semibold text-neutral-900 transition focus:border-[#1974E5] focus:bg-white focus:outline-none"
+                    className="h-11 w-full rounded-xl border border-neutral-200 bg-[#F6F6F6] px-3.5 text-sm font-semibold text-neutral-900 transition focus:border-[#1974E5] focus:bg-white focus:outline-none"
                   />
-
-                  {/* Modern Font Chip Selector (Replaces ugly OS dropdown!) */}
-                  <div>
-                    <span className="block text-[11px] font-bold text-neutral-500">
-                      Yazı Tipi
-                    </span>
-                    <div className="mt-1.5 grid grid-cols-4 gap-1.5">
-                      {FONTS.map((f) => {
-                        const active = selectedFont === f.label;
-                        return (
-                          <button
-                            key={f.id}
-                            type="button"
-                            onClick={() => setSelectedFont(f.label)}
-                            className={`flex flex-col items-center justify-center rounded-xl border py-1.5 transition ${
-                              active
-                                ? "border-[#1974E5] bg-[#1974E5] text-white shadow-2xs"
-                                : "border-neutral-200 bg-[#F9F9F9] text-neutral-800 hover:border-neutral-300"
-                            }`}
-                          >
-                            <span className={`text-sm ${f.className}`}>
-                              {f.sample}
-                            </span>
-                            <span className="text-[10px] font-semibold">
-                              {f.label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Modern Foil Color Pills (Only for Sıcak Baskı) */}
-                  {stampType === "hot_stamp" && (
-                    <div>
-                      <span className="block text-[11px] font-bold text-neutral-500">
-                        Varak Rengi
-                      </span>
-                      <div className="mt-1.5 grid grid-cols-3 gap-1.5">
-                        {FOIL_COLORS.map((fc) => {
-                          const active = selectedFoil === fc.label;
-                          return (
-                            <button
-                              key={fc.id}
-                              type="button"
-                              onClick={() => setSelectedFoil(fc.label)}
-                              className={`flex items-center justify-center gap-1.5 rounded-xl border px-2 py-2 text-[11px] font-bold transition ${
-                                active
-                                  ? "border-[#1974E5] bg-blue-50 text-[#1974E5]"
-                                  : "border-neutral-200 bg-[#F9F9F9] text-neutral-700 hover:border-neutral-300"
-                              }`}
-                            >
-                              <span
-                                className={`h-3 w-3 shrink-0 rounded-full border border-black/15 ${fc.dot}`}
-                              />
-                              <span className="truncate">{fc.label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Compact Ready Logo Trigger */}
-                  <div className="flex items-center justify-between rounded-xl bg-[#F6F6F6] px-3 py-2">
-                    <div className="text-[11px]">
-                      <span className="font-bold text-neutral-800">
-                        {selectedSymbol
-                          ? `${selectedSymbol.iconText} ${selectedSymbol.name} (+₺${selectedSymbol.price})`
-                          : "Hazır Logo / Sembol (+₺150)"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {selectedSymbol && (
-                        <button
-                          type="button"
-                          onClick={() => setSelectedSymbolId("")}
-                          className="rounded-lg bg-rose-100 px-2 py-1 text-[10px] font-bold text-rose-700"
-                        >
-                          Sil
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                      onClick={() => setShowSymbolsModal(true)}
-                      className="rounded-full bg-neutral-900 px-3 py-1 text-[11px] font-bold text-white transition hover:bg-neutral-700"
-                    >
-                      {selectedSymbol ? "Değiştir" : "Logo Seç"}
-                    </button>
-                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
         {/* 4. PRIMARY ACTION ROW — ABOVE THE FOLD */}
           <div className="space-y-2.5 pt-1">
@@ -1163,7 +1016,7 @@ export function ProductDetailClient({ slug }: { slug: string }) {
                   {q.answer ? (
                     <div className="mt-2.5 rounded-xl bg-white p-3 text-xs leading-relaxed text-neutral-700">
                       <span className="font-bold text-[#1974E5]">
-                        Getto Deri Yanıtı:{" "}
+                        BeeBlack Yanıtı:{" "}
                       </span>
                       {q.answer}
                     </div>
@@ -1215,17 +1068,12 @@ export function ProductDetailClient({ slug }: { slug: string }) {
             <div className="mt-4 space-y-3 text-xs leading-relaxed text-neutral-700 sm:text-sm">
               <div className="rounded-2xl bg-[#F6F6F6] p-4">
                 <p className="font-bold text-neutral-900">
-                  1. Lazer Baskı (Ücretsiz) vs. Sıcak Baskı (+₺150.00)
+                  1. Sıcak Baskı (Düz / Kör Baskı) Nasıl Yapılır?
                 </p>
                 <p className="mt-1">
-                  • <strong>Lazer Baskı:</strong> Deri yüzeyine yakılarak
-                  uygulanır, derinin kendi koyu tonunda kalıcı ve minimal bir
-                  görünüm sunar.
-                  <br />• <strong>Sıcak Baskı:</strong> Özel pirinç klişe ile
-                  ısı ve pres altında deriye gömülerek uygulanır;{" "}
-                  <strong>24K Gold (Altın)</strong>,{" "}
-                  <strong>Gümüş Yaldız</strong> veya{" "}
-                  <strong>Kör Gömme Baskı</strong> olarak seçilebilir.
+                  Özel pirinç klişe ile yüksek ısı ve pres altında deriye
+                  gömülerek uygulanır. Zamanla silinmez, derinin kendi doğal
+                  tonunda şık ve kalıcı bir iz bırakır.
                 </p>
               </div>
 

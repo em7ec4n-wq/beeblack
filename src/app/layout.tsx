@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Inter } from "next/font/google";
+import { Geist, Inter, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { StoreProvider } from "@/components/StoreProvider";
 import { AppShell } from "@/components/AppShell";
@@ -18,10 +18,21 @@ const inter = Inter({
   display: "swap",
 });
 
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
+  variable: "--font-editorial",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "Deriye İşlenmiş Miras, Geleceğe Taşınan Stil - Getto Deri",
+  title: "BeeBlack | Deriye İşlenmiş Miras, Geleceğe Taşınan Stil",
   description:
-    "%100 Hakiki Deri El Çantası, Cüzdan, Mekanizmalı Kartlık ve Kişiye Özel Sıcak Baskı & Hediye Paketi Seçenekleri.",
+    "BeeBlack %100 Hakiki Deri El Çantası, Cüzdan, Mekanizmalı Kartlık ve Kişiye Özel Sıcak Baskı & Hediye Paketi Seçenekleri.",
+  icons: {
+    icon: "/logo/beeblack-ari.png",
+  },
 };
 
 export default function RootLayout({
@@ -30,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className={`${geist.variable} ${inter.variable}`}>
+    <html lang="tr" className={`${geist.variable} ${inter.variable} ${cormorant.variable}`}>
       <body className="min-h-screen bg-[#F6F6F6] font-sans text-[#171717] antialiased">
         <StoreProvider>
           <AppShell>{children}</AppShell>

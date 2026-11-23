@@ -74,7 +74,7 @@ export default function CheckoutPage() {
       paymentMethod,
       paymentStatus: paymentMethod === "credit_card" ? "paid" : "pending",
       status: "preparing",
-      cargoCompany: "DHL eCommerce",
+      cargoCompany: "Aras Kargo",
       trackingNumber: trackingNum,
       customerNote: customerNote.trim() || undefined,
     });
@@ -423,7 +423,7 @@ export default function CheckoutPage() {
               </span>
             </div>
             <div className="flex justify-between text-neutral-600">
-              <span>Kargo Ücreti (DHL eCommerce)</span>
+              <span>Kargo Ücreti (Aras Kargo)</span>
               <span className="font-bold text-emerald-700">
                 {shippingCost === 0 ? "ÜCRETSİZ" : formatTRY(shippingCost)}
               </span>
