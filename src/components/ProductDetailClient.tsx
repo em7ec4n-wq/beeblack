@@ -250,12 +250,12 @@ export function ProductDetailClient({ slug }: { slug: string }) {
       </nav>
 
       {/* MAIN PRODUCT 2-COLUMN GRID */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-12">
+      <div className="grid grid-cols-1 gap-8 min-w-0 max-w-full overflow-hidden lg:grid-cols-12 lg:gap-12">
         {/* ===================================================== */}
         {/* LEFT COLUMN: IMAGE GALLERY + PRODUCT VIDEO SUPPORT     */}
         {/* ===================================================== */}
-        <div className="lg:col-span-7">
-          <div className="sticky top-24 space-y-3">
+        <div className="min-w-0 max-w-full lg:col-span-7">
+          <div className="sticky top-24 space-y-3 min-w-0 max-w-full">
             {/* Main Media Container */}
             <div className="relative aspect-4/5 w-full overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-2xs">
               {showVideo && product.videoUrl ? (
@@ -302,7 +302,7 @@ export function ProductDetailClient({ slug }: { slug: string }) {
             </div>
 
             {/* Thumbnail Row (Photos + Video thumb) */}
-            <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
+            <div className="flex items-center gap-2.5 overflow-x-auto pb-1 max-w-full w-full min-w-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {galleryImages.map((imgUrl, idx) => (
                 <button
                   key={idx}
@@ -346,7 +346,7 @@ export function ProductDetailClient({ slug }: { slug: string }) {
         {/* ===================================================== */}
         {/* RIGHT COLUMN: COMPACT, MODERN GETTO DERI BUY BOX      */}
         {/* ===================================================== */}
-        <div className="space-y-4 lg:col-span-5">
+        <div className="space-y-4 min-w-0 max-w-full lg:col-span-5">
           {/* 1. TITLE, PRICE, RED STRIKETHROUGH & STAR RATING */}
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight text-neutral-900 sm:text-[26px]">
